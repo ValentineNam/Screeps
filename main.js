@@ -40,7 +40,11 @@ module.exports.loop = () => {
     }
 
     // --- Вывод статистики ---
-    statsService.printStats(spawns, Game.rooms, roles, constants);
+    statsService.printStats(spawns, Game.rooms, roles, constants, {
+        roleOrder: [
+            'harvester', 'upgrader', 'builder', 'defender', 'guardian', 'healer', 'towerman', 'claimer', 'hardvester'
+        ]
+    });
 
      // --- Очистка памяти умерших крипов ---  
     for (const name in Memory.creeps) {

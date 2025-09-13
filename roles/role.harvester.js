@@ -1,10 +1,15 @@
-const sourcesModule = require('utils'); // ваш модуль поиска источников
+const sourcesModule = require('./services/utils'); // ваш модуль поиска источников
 
 module.exports = {
     run: (creep) => {
         // Инициализация состояния
         if (!creep.memory.state) {
             creep.memory.state = 'harvesting';
+        }
+        
+                
+        if (!creep.memory.homeRoom) {
+            creep.memory.homeRoom = 'E19N3'; // ваша основная комната
         }
 
         // Переключение состояний
@@ -62,13 +67,14 @@ module.exports = {
             }
         } else if (creep.memory.state === 'delivering') {
             // Используем функцию поиска целей с приоритетами
-            const target = sourcesModule.findTowers(creep);
+            const target = sourcesModule.findPriorityTarget(creep);
             if (target) {
                 if (creep.transfer(target, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
                     creep.moveTo(target, {visualizePathStyle: {stroke: '#ffffff'}});
                 }
-            } else {
-                // Нет целей для сдачи
+            } else if (creep.room.name !== creep.memory.homeRoom) {
+                const homePos = new RoomPosition(25, 25, creep.memory.homeRoom);
+                creep.moveTo(homePos, {visualizePathStyle: {stroke: '#ffffff'}});
             }
         }
     }

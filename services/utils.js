@@ -196,5 +196,9 @@ module.exports = {
                 creep.moveTo(target, {visualizePathStyle: {stroke: '#00ff00'}});
             }
         }
-    }
+    },
+
+    countCreepsByRoleAndRoom: (role, roomName) => _.filter(Game.creeps, c => c.memory.role === role && c.memory.homeRoom === roomName).length,
+
+    creepsSum: (roomName) => _.filter(Game.creeps, (creep) => creep.memory.homeRoom === roomName).length
 };

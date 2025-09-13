@@ -1,4 +1,4 @@
-const sourcesModule = require('utils');
+const sourcesModule = require('./services/utils');
 
 const targetRooms = ['E19N4', 'E19N2', 'E18N3']; // список целевых комнат
 

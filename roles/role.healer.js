@@ -1,4 +1,4 @@
-const sourcesModule = require('utils');
+const sourcesModule = require('./services/utils');
 
 module.exports = {
     run: (creep) => {

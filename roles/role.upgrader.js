@@ -1,4 +1,4 @@
-const sourcesModule = require('utils'); // Ваш модуль поиска источников
+const sourcesModule = require('./services/utils'); // Ваш модуль поиска источников
 
 module.exports = {
     run: (creep) => {

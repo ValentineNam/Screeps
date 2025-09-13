@@ -1,4 +1,4 @@
-const sourcesModule = require('utils'); // Импортируем ваш модуль с функциями поиска
+const sourcesModule = require('./services/utils'); // Импортируем ваш модуль с функциями поиска
 
 module.exports = {
     run: (creep) => {

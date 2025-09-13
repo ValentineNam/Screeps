@@ -1,4 +1,3 @@
-// role_guardian.js
 module.exports = {
     run: (creep) => {
         // Инициализация состояния

@@ -1,52 +1,52 @@
-const utils = require('./utils');
+const roles = {
+    builder: require('./role.builder'),
+    claimer: require('./role.claimer'),
+    defender: require('./role.defender'),
+    guardian: require('./role.guardian'),
+    // hardvester: require('./role.hardvester'),
+    harvester: require('./role.harvester'),
+    healer: require('./role.healer'),
+    towerman: require('./role.towerman'),
+    upgrader: require('./role.upgrader'),
+};
 
-function padLabel(label, width = 16) {
-    // Минимум 2 пробела, но выравнивание вправо по числу
-    const minSpaces = 2;
-    const spaces = Math.max(width - label.length, minSpaces);
-    return label + ' '.repeat(spaces);
-}
+const constants = require('./constants');
 
-module.exports.printStats = (spawns, rooms, roles, constants) => {
-    // Общая энергия по всем комнатам
-    let totalEnergy = 0;
-    let totalEnergyCapacity = 0;
-    for (const roomName in rooms) {
-        const room = rooms[roomName];
-        totalEnergy += room.energyAvailable;
-        totalEnergyCapacity += room.energyCapacityAvailable;
-    }
-    console.log(`[${Game.time}]Tick ${Game.time} | Общая энергия: ${totalEnergy} из ${totalEnergyCapacity}`);
+const towerManager = require('./towerManager');
+const spawnManager = require('./spawnManager');
 
-    // По каждому спавну — энергия
+const statsService = require('./statsService');
+
+module.exports.loop = () => {
+    const spawns = Object.values(Game.spawns);
+
     for (const spawn of spawns) {
-        const room = spawn.room;
-        console.log(`[${Game.time}]Spawn: ${spawn.name}`);
-        console.log(`[${Game.time}]Энергия: ${room.energyAvailable} из ${room.energyCapacityAvailable}`);
+        spawnManager.run(spawn);
     }
+    // --- Выполнение ролей ---
 
-    // Каждый 10-й тик — крипов по ролям для каждой комнаты/спавна
-    if (Game.time % 10 === 0) {
-        console.log(`Game.gcl.level: ${Game.gcl.level}`);
-        for (const spawn of spawns) {
-            const room = spawn.room;
-            console.log(`[${Game.time}]Spawn: ${spawn.name}`);
-            console.log(`[${Game.time}]Энергия: ${room.energyAvailable} из ${room.energyCapacityAvailable}`);
-
-            // Крипы, относящиеся к этой комнате (по homeRoom)
-            const creepsInRoom = Object.values(Game.creeps).filter(
-                c => c.memory.homeRoom === room.name
-            );
-            console.log(`[${Game.time}]Creeps:          ${creepsInRoom.length}`);
-            for (const role of Object.keys(roles)) {
-                const label = padLabel(role.charAt(0).toUpperCase() + role.slice(1) + 's:');
-                const count = creepsInRoom.filter(c => c.memory.role === role).length;
-                console.log(`[${Game.time}]${label}${count}`);
-            }
-            if (!(spawn === spawns[spawns.length - 1])) {
-                console.log(`[${Game.time}]#####################`);   
-            }
+    for (const name in Game.creeps) {
+        const creep = Game.creeps[name];
+        const role = creep.memory.role;
+        if (roles[role]) {
+            roles[role].run(creep);
         }
     }
-    console.log(`[${Game.time}]#########################################################################`);
-};
+
+    // --- Управление башнями ---
+    for (const roomName in Game.rooms) {
+        const room = Game.rooms[roomName];
+        towerManager.runTowers(room);
+    }
+
+    // --- Вывод статистики ---
+    statsService.printStats(spawns, Game.rooms, roles, constants);
+
+     // --- Очистка памяти умерших крипов ---  
+    for (const name in Memory.creeps) {
+        if (!Game.creeps[name]) {
+            delete Memory.creeps[name];
+            console.log(`Deleted memory of dead creep: ${name}`);
+        }
+    }
+}

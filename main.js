@@ -14,6 +14,7 @@ const constants = require('./constants');
 
 const towerManager = require('./towerManager');
 const spawnManager = require('./spawnManager');
+const linkManager = require('./linkManager');
 
 const statsService = require('./statsService');
 
@@ -32,6 +33,14 @@ module.exports.loop = () => {
             roles[role].run(creep);
         }
     }
+
+    // --- Передача энергии в башни ---
+    linkManager.run({
+        sourceId: constants.LINKS_ID.Spawn1.sourceId,
+        targetId: constants.LINKS_ID.Spawn1.targetId,
+        range: 10,
+        tickInterval: 50
+    });
 
     // --- Управление башнями ---
     for (const roomName in Game.rooms) {

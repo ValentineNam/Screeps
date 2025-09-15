@@ -111,7 +111,29 @@ const SPAWN_RULES = [
             ctx.energy >= 1000,
         memory: (ctx) => ({ role: 'hardvester', homeRoom: ctx.roomName }),
         body: (ctx, allowSmall) => pickBody('worker', ctx.energy, allowSmall)
-    }
+    },
+        {
+        role: 'logist',
+        // Если нет ни одного логиста — спавним первого с task: 'toTower'
+        condition: (ctx) => ctx.counts.logist < 1,
+        memory: (ctx) => ({
+            role: 'logist',
+            homeRoom: ctx.roomName,
+            task: 'toTower'
+        }),
+        body: (ctx, allowSmall) => pickBody('logist', ctx.energy, allowSmall)
+    },
+    {
+        role: 'logist',
+        // Если уже есть хотя бы один логист, но их меньше DESIRED — спавним второго с task: 'toLink'
+        condition: (ctx) => ctx.counts.logist === 1 && ctx.counts.logist < DESIRED.logist,
+        memory: (ctx) => ({
+            role: 'logist',
+            homeRoom: ctx.roomName,
+            task: 'toLink'
+        }),
+        body: (ctx, allowSmall) => pickBody('logist', ctx.energy, allowSmall)
+    },
 ];
 
 module.exports = {

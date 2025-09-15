@@ -166,7 +166,7 @@ module.exports = {
     };
 
     // Разрешать маленькие тела только если всего крипов меньше 5:
-    const allowSmall = ctx.creepsSum < 5;
+    const allowSmall = (ctx.creepsSum < 5) || spawn.room.energyAvailable <= 300;
 
     for (const rule of SPAWN_RULES) {
       if (!spawn.spawning && rule.condition(ctx)) {

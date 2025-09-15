@@ -53,4 +53,4 @@ module.exports.loop = () => {
             console.log(`Deleted memory of dead creep: ${name}`);
         }
     }
-}
+};

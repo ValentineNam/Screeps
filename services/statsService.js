@@ -43,8 +43,8 @@ module.exports.printStats = (spawns, rooms, roles, constants, opts = {}) => {
     // По каждому спавну — энергия
     for (const spawn of spawns) {
         const room = spawn.room;
-        console.log(`[${Game.time}]Spawn: ${spawn.name}`);
-        console.log(`[${Game.time}]Энергия: ${room.energyAvailable} из ${room.energyCapacityAvailable}`);
+        console.log(`Spawn: ${spawn.name}`);
+        console.log(`Энергия: ${room.energyAvailable} из ${room.energyCapacityAvailable}`);
     }
 
     // Каждый 10-й тик — крипов по ролям для каждой комнаты/спавна
@@ -54,14 +54,14 @@ module.exports.printStats = (spawns, rooms, roles, constants, opts = {}) => {
 
         for (const spawn of spawns) {
             const room = spawn.room;
-            console.log(`[${Game.time}]Spawn: ${spawn.name}`);
-            console.log(`[${Game.time}]Энергия: ${room.energyAvailable} из ${room.energyCapacityAvailable}`);
+            console.log(`Spawn: ${spawn.name}`);
+            console.log(`Энергия: ${room.energyAvailable} из ${room.energyCapacityAvailable}`);
 
             // Крипы, относящиеся к этой комнате (по homeRoom)
             const creepsInRoom = Object.values(Game.creeps).filter(
                 c => c.memory.homeRoom === room.name
             );
-            console.log(`[${Game.time}]Creeps:      ${creepsInRoom.length}`);
+            console.log(`Creeps:      ${creepsInRoom.length}`);
 
             // Автоматический расчет ширины для паддинга
             const maxLabelLength = Math.max(
@@ -72,10 +72,10 @@ module.exports.printStats = (spawns, rooms, roles, constants, opts = {}) => {
                 if (!roles[role]) continue;
                 const label = padLabel(role.charAt(0).toUpperCase() + role.slice(1) + 's:', maxLabelLength);
                 const count = creepsInRoom.filter(c => c.memory.role === role).length;
-                console.log(`[${Game.time}]${label}${count}`);
+                console.log(`${label}${count}`);
             }
             if (!(spawn === spawns[spawns.length - 1])) {
-                console.log(`[${Game.time}]#####################`);   
+                console.log(`#####################`);   
             }
         }
     }

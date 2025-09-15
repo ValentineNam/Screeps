@@ -39,7 +39,7 @@ const SPAWN_RULES = [
         condition: (ctx) =>
             (ctx.counts.harvester - 3) >= ctx.counts.upgrader,
         memory: (ctx) => ({ role: 'upgrader', homeRoom: ctx.roomName }),
-        body: (ctx) => pickBody('worker', ctx.energy, allowSmall)
+        body: (ctx, allowSmall) => pickBody('worker', ctx.energy, allowSmall)
     },
     {
         role: 'builder',
@@ -48,7 +48,7 @@ const SPAWN_RULES = [
             (DESIRED.harvester - 1) <= ctx.counts.harvester &&
             DESIRED.builder > ctx.counts.builder,
         memory: (ctx) => ({ role: 'builder', homeRoom: ctx.roomName }),
-        body: (ctx) => pickBody('worker', ctx.energy, allowSmall)
+        body: (ctx, allowSmall) => pickBody('worker', ctx.energy, allowSmall)
     },
     {
         role: 'defender',
@@ -57,7 +57,7 @@ const SPAWN_RULES = [
             return ctx.counts.defender < desiredDefenders;
         },
         memory: (ctx) => ({ role: 'defender', type: 'attack', homeRoom: ctx.roomName }),
-        body: (ctx) => pickBody('defender', ctx.energy, allowSmall)
+        body: (ctx, allowSmall) => pickBody('defender', ctx.energy, allowSmall)
     },
     {
         role: 'guardian',
@@ -77,14 +77,14 @@ const SPAWN_RULES = [
                 ],
             routeIndex: 0
         }),
-        body: (ctx) => pickBody('defender', ctx.energy, allowSmall)
+        body: (ctx, allowSmall) => pickBody('defender', ctx.energy, allowSmall)
     },
     {
         role: 'healer',
         condition: (ctx) =>
             ctx.counts.healer < DESIRED.healer && ctx.energy >= 1000,
         memory: (ctx) => ({ role: 'healer', homeRoom: ctx.roomName }),
-        body: (ctx) => pickBody('healer', ctx.energy, allowSmall)
+        body: (ctx, allowSmall) => pickBody('healer', ctx.energy, allowSmall)
     },
     {
         role: 'towerman',
@@ -92,7 +92,7 @@ const SPAWN_RULES = [
             ctx.counts.harvester >= (DESIRED.harvester / 2) &&
             ctx.counts.towerman < DESIRED.towerman,
         memory: (ctx) => ({ role: 'towerman', homeRoom: ctx.roomName }),
-        body: (ctx) => pickBody('worker', ctx.energy, allowSmall)
+        body: (ctx, allowSmall) => pickBody('worker', ctx.energy, allowSmall)
     },
     {
         role: 'claimer',
@@ -101,7 +101,7 @@ const SPAWN_RULES = [
             ctx.energy >= 1800 &&
             Game.gcl.level >= 3,
         memory: (ctx) => ({ role: 'claimer', homeRoom: ctx.roomName }),
-        body: (ctx) => pickBody('claimer', ctx.energy, allowSmall)
+        body: (ctx, allowSmall) => pickBody('claimer', ctx.energy, allowSmall)
     },
     {
         role: 'hardvester',
@@ -110,7 +110,7 @@ const SPAWN_RULES = [
             ctx.counts.hardvester < DESIRED.hardvester &&
             ctx.energy >= 1000,
         memory: (ctx) => ({ role: 'hardvester', homeRoom: ctx.roomName }),
-        body: (ctx) => pickBody('worker', ctx.energy, allowSmall)
+        body: (ctx, allowSmall) => pickBody('worker', ctx.energy, allowSmall)
     }
 ];
 

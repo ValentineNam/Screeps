@@ -1,6 +1,6 @@
-const constants = require('../configs/constants');
-const nameGenerator = require('../services/nameGenerator');
-const utils = require('../services/utils');
+const constants = require('./constants');
+const nameGenerator = require('./nameGenerator');
+const utils = require('./utils');
 
 const BODYPART_COST = constants.BODYPART_COST;
 const BODIES = constants.CREEPS_BODIES;
@@ -112,10 +112,14 @@ const SPAWN_RULES = [
         memory: (ctx) => ({ role: 'hardvester', homeRoom: ctx.roomName }),
         body: (ctx, allowSmall) => pickBody('worker', ctx.energy, allowSmall)
     },
-        {
+    {
         role: 'logist',
         // Если нет ни одного логиста — спавним первого с task: 'toTower'
-        condition: (ctx) => ctx.counts.logist < 1,
+        condition: (ctx) => {
+            // Проверяем, что в LINKS_ID есть данные для этой комнаты/спавна
+            const linkConfig = constants.LINKS_ID[ctx.roomName] || constants.LINKS_ID[ctx.spawnName];
+            return ctx.counts.logist < 1 && linkConfig && linkConfig.sourceId && linkConfig.targetId;
+        },
         memory: (ctx) => ({
             role: 'logist',
             homeRoom: ctx.roomName,
@@ -126,7 +130,10 @@ const SPAWN_RULES = [
     {
         role: 'logist',
         // Если уже есть хотя бы один логист, но их меньше DESIRED — спавним второго с task: 'toLink'
-        condition: (ctx) => ctx.counts.logist === 1 && ctx.counts.logist < DESIRED.logist,
+        condition: (ctx) => {
+            const linkConfig = constants.LINKS_ID[ctx.roomName] || constants.LINKS_ID[ctx.spawnName];
+            return ctx.counts.logist === 1 && ctx.counts.logist < DESIRED.logist && linkConfig && linkConfig.sourceId && linkConfig.targetId;
+        },
         memory: (ctx) => ({
             role: 'logist',
             homeRoom: ctx.roomName,
@@ -148,6 +155,7 @@ module.exports = {
         defender: utils.countCreepsByRoleAndRoom('defender', roomName),
         guardian: utils.countCreepsByRoleAndRoom('guardian', roomName),
         healer: utils.countCreepsByRoleAndRoom('healer', roomName),
+        logist: utils.countCreepsByRoleAndRoom('logist', roomName),
         towerman: utils.countCreepsByRoleAndRoom('towerman', roomName),
         claimer: utils.countCreepsByRoleAndRoom('claimer', roomName),
         hardvester: utils.countCreepsByRoleAndRoom('hardvester', roomName)

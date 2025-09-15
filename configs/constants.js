@@ -43,7 +43,7 @@ const DESIRED_COUNTS = {
     claimer: 1,
     healer: 1,
     towerman: 1,
-    hardvester: 2,
+    hardvester: 0, // ToDo: пофиксить память
     logist: 2
 };
 
@@ -53,8 +53,8 @@ const LINKS_ID = {
         targetId: '68c026df04d00b0044561955'
     },
     E19S1SPAWN1: {
-        sourceId: 'SOURCE_LINK_ID_HERE',
-        targetId: 'TARGET_LINK_ID_HERE'
+        sourceId: null,
+        targetId: null
     }
 };
 

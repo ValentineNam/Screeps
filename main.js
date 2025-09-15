@@ -36,8 +36,8 @@ module.exports.loop = () => {
 
     // --- Передача энергии в башни ---
     linkManager.run({
-        sourceId: constants.LINKS_ID.Spawn1.sourceId,
-        targetId: constants.LINKS_ID.Spawn1.targetId,
+        sourceId: '68c038b470da6d0069d3c36c',
+        targetId: '68c026df04d00b0044561955',
         range: 10,
         tickInterval: 50
     });
@@ -51,7 +51,7 @@ module.exports.loop = () => {
     // --- Вывод статистики ---
     statsService.printStats(spawns, Game.rooms, roles, constants, {
         roleOrder: [
-            'harvester', 'upgrader', 'builder', 'defender', 'guardian', 'healer', 'towerman', 'claimer', 'hardvester'
+            'harvester', 'upgrader', 'builder', 'defender', 'guardian', 'healer', 'logist', 'towerman', 'claimer', 'hardvester'
         ]
     });
 

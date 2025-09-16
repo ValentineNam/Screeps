@@ -35,12 +35,12 @@ module.exports.loop = () => {
     }
 
     // --- Передача энергии в башни ---
-    linkManager.run({
-        sourceId: '68c038b470da6d0069d3c36c',
-        targetId: '68c026df04d00b0044561955',
-        range: 10,
-        tickInterval: 50
-    });
+    // linkManager.run({
+    //     sourceId: '68c038b470da6d0069d3c36c',
+    //     targetId: '68c026df04d00b0044561955',
+    //     range: 10,
+    //     tickInterval: 50
+    // });
 
     // --- Управление башнями ---
     for (const roomName in Game.rooms) {

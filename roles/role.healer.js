@@ -1,4 +1,5 @@
-const sourcesModule = require('./services/utils');
+const sourcesModule = require('./utils');
+const mainSpawn = 'W5S12SPAWN1';
 
 module.exports = {
     run: (creep) => {
@@ -81,7 +82,7 @@ module.exports = {
                     return; // После передачи не идем дальше
                 }
                 // Если расширения заполнены, идем в спавн
-                const spawn = Game.spawns['Spawn1'];
+                const spawn = Game.spawns[mainSpawn];
                 if (spawn && creep.transfer(spawn, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
                     creep.moveTo(spawn, {visualizePathStyle: {stroke: '#ffffff'}});
                 }

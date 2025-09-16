@@ -1,6 +1,8 @@
 // Тела крипов
-const BODY_3_WORKER = [WORK, CARRY, MOVE];
+const BODY_200P_WORKER = [WORK, CARRY, MOVE];
+const BODY_300P_WORKER = [WORK, WORK, CARRY, MOVE];
 const BODY_550P_WORKER = [WORK, MOVE, CARRY, WORK, CARRY, WORK, CARRY, MOVE];
+const BODY_800P_WORKER = [WORK, MOVE, CARRY, WORK, MOVE, CARRY, WORK, MOVE, CARRY, WORK, MOVE, CARRY];
 const BODY_1000P_WORKER = [WORK, MOVE, CARRY, WORK, MOVE, CARRY, WORK, MOVE, CARRY, CARRY, CARRY, MOVE, CARRY, WORK, CARRY, MOVE];
 const BODY_300P_DEFENDER = [TOUGH, TOUGH, WORK, CARRY, ATTACK, MOVE];
 const BODY_550P_DEFENDER = [TOUGH, TOUGH, TOUGH, TOUGH, MOVE, MOVE, CARRY, CARRY, WORK, ATTACK, ATTACK, MOVE];
@@ -14,7 +16,7 @@ const BODY_300P_LOGIST = [CARRY, CARRY, CARRY, CARRY, MOVE, MOVE];
 const BODY_550P_LOGIST = [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE];
 
 const CREEPS_BODIES = {
-    worker: [BODY_3_WORKER, BODY_550P_WORKER, BODY_1000P_WORKER],
+    worker: [BODY_200P_WORKER, BODY_300P_WORKER, BODY_550P_WORKER, BODY_800P_WORKER, BODY_1000P_WORKER],
     defender: [BODY_300P_DEFENDER, BODY_550P_DEFENDER, BODY_600P_DEFENDER, T1000],
     claimer: [CLAIMER_650P_CREEP, CLAIMER_1800P_CREEP],
     healer: [BODY_1000P_HEALER],
@@ -35,17 +37,20 @@ const BODYPART_COST = {
 
 // Желаемое количество крипов по ролям
 const DESIRED_COUNTS = {
-    harvester: 6,
-    upgrader: 5,
-    builder: 5,
-    defender: 5,
+    harvester: 7,
+    upgrader: 7,
+    builder: 6,
+    defender: 6,
     guardian: 1,
     claimer: 1,
     healer: 1,
     towerman: 1,
-    hardvester: 0, // ToDo: пофиксить память
-    logist: 2
+    hardvester: 0,
+    logist: 0
 };
+
+// Мои комнаты
+const ROOMS = ['W5S12'];
 
 const LINKS_ID = {
     Spawn1: {
@@ -53,8 +58,8 @@ const LINKS_ID = {
         targetId: '68c026df04d00b0044561955'
     },
     E19S1SPAWN1: {
-        sourceId: null,
-        targetId: null
+        sourceId: 'SOURCE_LINK_ID_HERE',
+        targetId: 'TARGET_LINK_ID_HERE'
     }
 };
 
@@ -62,5 +67,6 @@ module.exports = {
     CREEPS_BODIES,
     BODYPART_COST,
     DESIRED_COUNTS,
+    ROOMS,
     LINKS_ID
 };

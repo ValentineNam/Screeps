@@ -1,4 +1,6 @@
-const sourcesModule = require('./services/utils'); // Ваш модуль поиска источников
+const sourcesModule = require('./utils'); // Ваш модуль поиска источников
+const constants = require('./constants');
+const myRooms = constants.ROOMS;
 
 module.exports = {
     run: (creep) => {
@@ -7,7 +9,7 @@ module.exports = {
         }
         
         if (!creep.memory.homeRoom) {
-            creep.memory.homeRoom = 'E19N3'; // ваша основная комната
+            creep.memory.homeRoom = myRooms[0]; // ваша основная комната
         }
 
         let state = creep.memory.state;

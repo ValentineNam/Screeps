@@ -1,6 +1,6 @@
 module.exports = {
     run: (creep) => {
-        const targetRoomName = 'E19S1'; // целевая комната, можно добавить еще E18N13 и переключаться
+        const targetRoomName = 'W4S13'; // целевая комната, можно добавить еще E18N13 и переключаться
         // Запоминаем целевую комнату в памяти, чтобы не задавать каждый раз
         if (!creep.memory.targetRoom) {
             creep.memory.targetRoom = targetRoomName;

@@ -1,4 +1,5 @@
-const sourcesModule = require('./services/utils'); // ваш модуль поиска источников
+const sourcesModule = require('./utils'); // ваш модуль поиска источников
+const targetRooms = ['W4S12']
 
 module.exports = {
     run: (creep) => {
@@ -36,7 +37,7 @@ module.exports = {
                     creep.memory.sourceId = source.id;
                 } else {
                     // Нет источников в текущей комнате
-                    const targetRoomName = 'E19N2'; // замените
+                    const targetRoomName = targetRooms[0]; // замените
                     if (Game.rooms[targetRoomName]) {
                         creep.moveTo(new RoomPosition(25, 25, targetRoomName));
                         return;

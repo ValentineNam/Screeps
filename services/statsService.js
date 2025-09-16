@@ -38,7 +38,7 @@ module.exports.printStats = (spawns, rooms, roles, constants, opts = {}) => {
         totalEnergy += room.energyAvailable;
         totalEnergyCapacity += room.energyCapacityAvailable;
     }
-    console.log(`[${Game.time}]Tick ${Game.time} | Общая энергия: ${totalEnergy} из ${totalEnergyCapacity}`);
+    console.log(`Tick ${Game.time} | Общая энергия: ${totalEnergy} из ${totalEnergyCapacity}`);
 
     // По каждому спавну — энергия
     for (const spawn of spawns) {
@@ -54,8 +54,6 @@ module.exports.printStats = (spawns, rooms, roles, constants, opts = {}) => {
 
         for (const spawn of spawns) {
             const room = spawn.room;
-            console.log(`Spawn: ${spawn.name}`);
-            console.log(`Энергия: ${room.energyAvailable} из ${room.energyCapacityAvailable}`);
 
             // Крипы, относящиеся к этой комнате (по homeRoom)
             const creepsInRoom = Object.values(Game.creeps).filter(
@@ -79,5 +77,5 @@ module.exports.printStats = (spawns, rooms, roles, constants, opts = {}) => {
             }
         }
     }
-    console.log(`[${Game.time}]#########################################################################`);
+    console.log(`#########################################################################`);
 };

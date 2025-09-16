@@ -1,4 +1,8 @@
-const sourcesModule = require('./services/utils'); // Импортируем ваш модуль с функциями поиска
+const sourcesModule = require('./utils'); // Импортируем ваш модуль с функциями поиска
+const constants = require('./constants');
+const myRooms = constants.ROOMS;
+
+const targetRooms = ['W5S12']; // список целевых комнат
 
 module.exports = {
     run: (creep) => {
@@ -31,6 +35,9 @@ module.exports = {
         // Проверка врагов рядом
         const enemies = creep.room.find(FIND_HOSTILE_CREEPS);
         const isEnemyNearby = enemies.length > 0;
+        
+        console.log(`Enemies in room: ${enemies.length}`);
+        console.log(`Current state: ${creep.memory.state}`);
 
         // Переключение режима при обнаружении врагов или их исчезновении
         if (isEnemyNearby && creep.memory.state !== 'attack') {
@@ -77,7 +84,7 @@ module.exports = {
                 }
             } else {
                 // Емкость полная — передача энергии
-                const homeRoom = creep.memory.homeRoom || 'E19N3'; // например, задайте свою домашнюю комнату
+                const homeRoom = creep.memory.homeRoom || targetRooms[0]; // например, задайте свою домашнюю комнату
                 if (creep.room.name !== homeRoom) {
                     creep.moveTo(new RoomPosition(25, 25, homeRoom), {visualizePathStyle: {stroke: '#ffffff'}});
                     return;
@@ -92,6 +99,10 @@ module.exports = {
                     if (creep.transfer(storage, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
                         creep.moveTo(storage, {visualizePathStyle: {stroke: '#ffffff'}});
                     }
+                } else {
+                    const targetRoom = targetRooms[0];
+                    creep.moveTo(new RoomPosition(16, 26, targetRoom), {visualizePathStyle: {stroke: '#ffaa00'}});
+                    return;
                 }
             }
         }

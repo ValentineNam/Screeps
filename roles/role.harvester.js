@@ -1,4 +1,8 @@
-const sourcesModule = require('./services/utils'); // ваш модуль поиска источников
+const sourcesModule = require('./utils'); // ваш модуль поиска источников
+const constants = require('./constants');
+const myRooms = constants.ROOMS;
+
+const targetRooms = ['W5S12']; // список целевых комнат
 
 module.exports = {
     run: (creep) => {
@@ -9,7 +13,7 @@ module.exports = {
         
                 
         if (!creep.memory.homeRoom) {
-            creep.memory.homeRoom = 'E19N3'; // ваша основная комната
+            creep.memory.homeRoom = myRooms[0]; // ваша основная комната
         }
 
         // Переключение состояний
@@ -41,7 +45,7 @@ module.exports = {
                     creep.memory.sourceId = source.id;
                 } else {
                     // Нет источников в текущей комнате
-                    const targetRoomName = 'E19N2'; // замените
+                    const targetRoomName = targetRooms[0]; // замените
                     if (Game.rooms[targetRoomName]) {
                         creep.moveTo(new RoomPosition(25, 25, targetRoomName));
                         return;
@@ -75,6 +79,10 @@ module.exports = {
             } else if (creep.room.name !== creep.memory.homeRoom) {
                 const homePos = new RoomPosition(25, 25, creep.memory.homeRoom);
                 creep.moveTo(homePos, {visualizePathStyle: {stroke: '#ffffff'}});
+            } else {
+                const targetRoom = targetRooms[0];
+                creep.moveTo(new RoomPosition(18, 29, targetRoom), {visualizePathStyle: {stroke: '#ffaa00'}});
+                return; 
             }
         }
     }

@@ -1,28 +1,50 @@
 const roles = {
     builder: require('./role.builder'),
     claimer: require('./role.claimer'),
+    crawler: require('./role.crawler'),
     defender: require('./role.defender'),
     guardian: require('./role.guardian'),
-    // hardvester: require('./role.hardvester'),
     harvester: require('./role.harvester'),
     healer: require('./role.healer'),
+    miner: require('./role.miner'),
+    scout: require('./role.scout'),
     towerman: require('./role.towerman'),
     upgrader: require('./role.upgrader'),
+
+    squad_tank: require('./role.squadTank'),
+    squad_damager: require('./role.squadDamager'),
+    squad_ranger: require('./role.squadRanger'),
+    squad_healer: require('./role.squadHealer'), 
 };
 
-const constants = require('./constants');
+const constants = require('./config.constants');
 
-const towerManager = require('./towerManager');
-const spawnManager = require('./spawnManager');
-const linkManager = require('./linkManager');
+const towerManager = require('./controller.towerManager');
+const spawnManager = require('./controller.spawnManager');
+const missionManager = require('./controller.missionManager');
+const linkManager = require('./controller.linkManager');
 
-const statsService = require('./statsService');
+const state = require('./state');
+
+const statsService = require('./service.statsService');
 
 module.exports.loop = () => {
     const spawns = Object.values(Game.spawns);
 
+    // 1. Анализ ситуации и смена состояния
+    for (const roomName in Game.rooms) {
+        // ...анализ врагов, крипов, миссий...
+        // state.setState(roomName, newState);
+    }
+
     for (const spawn of spawns) {
-        spawnManager.run(spawn);
+        const baseState = state.getState(spawn.room.name);
+        // missionManager.run(spawn);
+        spawnManager.run(spawn, baseState);
+
+        // if (Game.flags['SQUAD_ATTACK']) { // имя флага для активации сбора отряда
+        //     squadManager.run(spawn, 'SQUAD_ATTACK');
+        // }
     }
     // --- Выполнение ролей ---
 
@@ -51,7 +73,7 @@ module.exports.loop = () => {
     // --- Вывод статистики ---
     statsService.printStats(spawns, Game.rooms, roles, constants, {
         roleOrder: [
-            'harvester', 'upgrader', 'builder', 'defender', 'guardian', 'healer', 'logist', 'towerman', 'claimer', 'hardvester'
+            'harvester', 'upgrader', 'builder', 'defender', 'guardian', 'healer', 'logist', 'towerman', 'claimer', 'bioHarvester'
         ]
     });
 

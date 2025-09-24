@@ -1,4 +1,4 @@
-const sourcesModule = require('./services/utils');
+const sourcesModule = require('./utils');
 
 module.exports = {
     run: (creep) => {
@@ -38,7 +38,14 @@ module.exports = {
                     creep.moveTo(source, {visualizePathStyle: {stroke: '#ffaa00'}});
                 }
             } else {
-                console.log(`${creep.name} no sources`);
+                // Нет доступных источников — пробуем взять из storage
+                if (creep.room.storage && creep.room.storage.store[RESOURCE_ENERGY] > 0) {
+                    if (creep.withdraw(creep.room.storage, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
+                        creep.moveTo(creep.room.storage, {visualizePathStyle: {stroke: '#ffaa00'}});
+                    }
+                } else {
+                    console.log(`${creep.name} no sources or storage`);
+                }
             }
         } else if (state == 'repair') {
             if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) {

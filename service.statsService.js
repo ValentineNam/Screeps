@@ -1,4 +1,4 @@
-const utils = require('./utils');
+const utils = require('./services/utils');
 
 // Определите желаемый порядок ролей (можно менять)
 const DEFAULT_ROLE_ORDER = [

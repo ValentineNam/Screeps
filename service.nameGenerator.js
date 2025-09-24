@@ -12,14 +12,16 @@ const names = [
     'Vasiliy', 'John', 'Alex', 'Michael', 'David',
     'James', 'Robert', 'William', 'Richard', 'Joseph',
     'Charles', 'Thomas', 'Christopher', 'Daniel', 'Matthew',
-    'Anthony', 'Mark', 'Donald', 'Steven', 'Paul'
+    'Anthony', 'Mark', 'Donald', 'Steven', 'Paul',
+    'Andrew', 'Joshua', 'Kenneth', 'Kevin', 'Brian'
 ];
 
 const surnames = [
     'Zaicev', 'Smith', 'Johnson', 'Williams', 'Brown',
     'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez',
     'Martinez', 'Hernandez', 'Lopez', 'Gonzalez', 'Wilson',
-    'Anderson', 'Thomas', 'Taylor', 'Moore', 'Jackson'
+    'Anderson', 'Thomas', 'Taylor', 'Moore', 'Jackson',
+    'Martin', 'Lee', 'Perez', 'Thompson', 'White'
 ];
 
 function getRandomElement(arr) {

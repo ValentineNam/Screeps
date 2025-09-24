@@ -14,13 +14,28 @@ const BODY_1000P_HEALER = [TOUGH, TOUGH, TOUGH, TOUGH, TOUGH, WORK, CARRY, MOVE,
 const BODY_150P_LOGIST = [CARRY, CARRY, MOVE];
 const BODY_300P_LOGIST = [CARRY, CARRY, CARRY, CARRY, MOVE, MOVE];
 const BODY_550P_LOGIST = [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE];
+const BODY_700P_MINER = [WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE, MOVE];
+const BODY_800P_MINER = [WORK, WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE];
+const BODY_1300P_MINER = [WORK, WORK, WORK, WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE];
+const BODY_800P_CRAWLER = [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE, MOVE];
+const BODY_TANK = [TOUGH,TOUGH,TOUGH,TOUGH,TOUGH,TOUGH,TOUGH,TOUGH,TOUGH,TOUGH, MOVE,MOVE,MOVE,MOVE, ATTACK,ATTACK,ATTACK,ATTACK,ATTACK];
+const BODY_DAMAGER = [TOUGH,TOUGH,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,MOVE,MOVE,MOVE];
+const BODY_RANGER = [TOUGH,TOUGH,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,MOVE,MOVE,MOVE];
+const BODY_HEALER = [TOUGH,TOUGH,HEAL,HEAL,HEAL,MOVE,MOVE,MOVE];
 
 const CREEPS_BODIES = {
     worker: [BODY_200P_WORKER, BODY_300P_WORKER, BODY_550P_WORKER, BODY_800P_WORKER, BODY_1000P_WORKER],
     defender: [BODY_300P_DEFENDER, BODY_550P_DEFENDER, BODY_600P_DEFENDER, T1000],
     claimer: [CLAIMER_650P_CREEP, CLAIMER_1800P_CREEP],
     healer: [BODY_1000P_HEALER],
-    logist: [BODY_150P_LOGIST, BODY_300P_LOGIST, BODY_550P_LOGIST]
+    logist: [BODY_150P_LOGIST, BODY_300P_LOGIST, BODY_550P_LOGIST],
+    miner: [BODY_700P_MINER, BODY_800P_MINER, BODY_1300P_MINER],
+    crawler: [BODY_800P_CRAWLER],
+    squad_tank: [BODY_TANK],
+    squad_damager: [BODY_DAMAGER],
+    squad_ranger: [BODY_RANGER],
+    squad_healer: [BODY_HEALER],
+    bioHarvester: [BODY_1000P_WORKER]
 };
 
 // Стоимость частей тела
@@ -37,16 +52,17 @@ const BODYPART_COST = {
 
 // Желаемое количество крипов по ролям
 const DESIRED_COUNTS = {
-    harvester: 7,
-    upgrader: 7,
-    builder: 6,
-    defender: 6,
+    harvester: 5,
+    upgrader: 5,
+    builder: 5,
+    defender: 5,
     guardian: 1,
     claimer: 1,
     healer: 1,
     towerman: 1,
     hardvester: 0,
-    logist: 0
+    bioHarvester: 2,
+    logist: 0,
 };
 
 // Мои комнаты
@@ -63,10 +79,45 @@ const LINKS_ID = {
     }
 };
 
+const STATES = {
+    normal: 'normal',
+    upgrading: 'upgrading',
+    repairing: 'repairing',
+    building: 'building',
+    harvesting: 'harvesting',
+    defending: 'defending',
+    claiming: 'claiming',
+    healing: 'healing',
+    transporting: 'transporting',
+    mining: 'mining',
+    idle: 'idle'
+};
+
+const BASE_STATES = {
+    // нет врагов, нет миссий
+    normal: 'normal',
+    // есть враги, все крипы убиты
+    emergency: 'emergency',
+    // есть враги, крипы живы
+    war: 'war',
+    // нет врагов, есть какие-то специальные миссии
+    peace: 'peace',
+    // есть миссия по захвату комнаты
+    expansion: 'expansion',
+    // подготовка к миссии
+    prepare_to_mission: 'prepare_to_mission',
+    // миссия по добыче ресурсов
+    farm: 'farm',
+    // миссия по строительству
+    build: 'build'
+}
+
 module.exports = {
     CREEPS_BODIES,
     BODYPART_COST,
     DESIRED_COUNTS,
     ROOMS,
+    STATES,
+    BASE_STATES,
     LINKS_ID
 };

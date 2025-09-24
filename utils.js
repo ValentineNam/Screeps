@@ -98,10 +98,10 @@ module.exports = {
         const priorityTypes = [
             STRUCTURE_SPAWN,
             STRUCTURE_EXTENSION,
+            STRUCTURE_TOWER,
             STRUCTURE_CONTAINER,
             STRUCTURE_STORAGE,
             STRUCTURE_RAMPART,
-            STRUCTURE_TOWER,
             STRUCTURE_WALL,
             STRUCTURE_ROAD,
             STRUCTURE_LINK,

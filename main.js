@@ -1,20 +1,21 @@
 const roles = {
     builder: require('./role.builder'),
+    remoteBuilder: require('./role.builder'),
     claimer: require('./role.claimer'),
     crawler: require('./role.crawler'),
     defender: require('./role.defender'),
-    guardian: require('./role.guardian'),
     harvester: require('./role.harvester'),
-    healer: require('./role.healer'),
+    remoteHarvester: require('./role.remoteHarvester'),
+    // healer: require('./role.healer'),
     miner: require('./role.miner'),
-    scout: require('./role.scout'),
+    // scout: require('./role.scout'),
     towerman: require('./role.towerman'),
     upgrader: require('./role.upgrader'),
 
-    squad_tank: require('./role.squadTank'),
-    squad_damager: require('./role.squadDamager'),
-    squad_ranger: require('./role.squadRanger'),
-    squad_healer: require('./role.squadHealer'), 
+    // squad_tank: require('./role.squadTank'),
+    // squad_damager: require('./role.squadDamager'),
+    // squad_ranger: require('./role.squadRanger'),
+    // squad_healer: require('./role.squadHealer'), 
 };
 
 const constants = require('./config.constants');
@@ -30,6 +31,9 @@ const statsService = require('./service.statsService');
 
 module.exports.loop = () => {
     const spawns = Object.values(Game.spawns);
+    if (!Memory.rooms) {
+        Memory.rooms = []
+    }
 
     // 1. Анализ ситуации и смена состояния
     for (const roomName in Game.rooms) {
@@ -56,14 +60,6 @@ module.exports.loop = () => {
         }
     }
 
-    // --- Передача энергии в башни ---
-    // linkManager.run({
-    //     sourceId: '68c038b470da6d0069d3c36c',
-    //     targetId: '68c026df04d00b0044561955',
-    //     range: 10,
-    //     tickInterval: 50
-    // });
-
     // --- Управление башнями ---
     for (const roomName in Game.rooms) {
         const room = Game.rooms[roomName];
@@ -73,7 +69,17 @@ module.exports.loop = () => {
     // --- Вывод статистики ---
     statsService.printStats(spawns, Game.rooms, roles, constants, {
         roleOrder: [
-            'harvester', 'upgrader', 'builder', 'defender', 'guardian', 'healer', 'logist', 'towerman', 'claimer', 'bioHarvester'
+            'harvester',
+            'upgrader',
+            'builder',
+            'miner',
+            'remoteHarvester',
+            'remoteBuilder',
+            'crawler',
+            'defender',
+            'healer',
+            'towerman',
+            'claimer',
         ]
     });
 
@@ -85,3 +91,24 @@ module.exports.loop = () => {
         }
     }
 };
+
+// ToDo: вынести операции с памятью в отдельный модуль - создать api для взаимодействия с памятью:
+// поиск, добавление, удаление, очистка
+// ToDo: вынести обработку текущего нахождения крипов по комнатам -> особенно важны скауты
+// Каждая занятая своими объектами и/или крипами комната описывается на содержимое:
+// крипы, здания, ресурсы (плюс свободные места возле), стройплощадки, враги, вражеские здания
+// далее, все это заносится в память и крипы, вместо того, чтоы каждый раз обращаться к объектукарты
+// будут обращаться к объекту памяти (например, в случае с поиском ближайшего врага или ресурса)
+// это нужно, чтобы минимизировать цп нагрузку
+// ToDo: создать систему задач, основанную на разведке и доступных данных
+// Задачи тоже хранить в памяти, но также иметь задачи, которые создаются поьзователем
+// ToDo: разобраться с системой стейтов (в осаде и тп). Проработать ситему заданий на разные кейсы
+// ToDo: реализовать добычу и передачу ресурсов в соседних комнатах.
+// ToDo: реализовать автоматическое разорение гнезд вторженцев в соседних с занятыми комнатах.
+// ToDo: реализовать систему автоматической добычи ресурсов, отличных от энергии
+// ToDo: на каждую комнату, где будет производится добыча создать стратегию (на 1 ресурс: 1 майнер, 1 коробка, 1 строитель для починки)
+// Inscreasing the reusePath option in the Creep.moveTo method helps saving CPU.
+// TIP OF THE DAY: A creep can execute some commands simultaneously in one tick, for example move+build+dropEnergy
+// Creep.reserveController
+// Spawn.renewCreep
+//  Inscreasing the reusePath option in the Creep.moveTo method helps saving CPU.

@@ -1,6 +1,6 @@
-const missions = require('./config.missions');
+const missions = require('./config.tasks.js');
 const nameGenerator = require('./services/service.nameGenerator');
-const constants = require('./config.constants');
+const constants = require('./config.constants.js');
 
 function assignMission(role, spawn) {
     for (const mission of missions) {
@@ -57,3 +57,15 @@ module.exports = {
         assignMission('builder', spawn);
     }
 };
+
+
+let mission = {
+    taskId: 1,
+    type: 'spawn/build/mine/repair/move_src/claim/squad_spawn',
+    room: 'name',
+    coords: {x: 25, y: 25},
+    active: true, // например, миссия на создание особых войнов для особых ситуаций мб false
+    in_progress: false,
+    opts: [],
+    repeatable: false
+}

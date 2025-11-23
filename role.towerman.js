@@ -1,5 +1,5 @@
 const sourcesModule = require('./utils'); // ваш модуль поиска источников
-const targetRooms = ['W4S12']
+const targetRooms = ['E19S7']; // список целевых комнат
 
 module.exports = {
     run: (creep) => {
@@ -16,50 +16,132 @@ module.exports = {
         }
 
         if (creep.memory.state === 'harvesting') {
-            // 1. Ищем свободную энергию на земле
-            const droppedEnergy = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
-                filter: (res) => res.resourceType === RESOURCE_ENERGY && res.amount > 0
+            // 1. Ищем контейнеры ≥70% (как раньше)
+            const nearbyContainers = creep.room.find(FIND_STRUCTURES, {
+                filter: (structure) =>
+                    structure.structureType === STRUCTURE_CONTAINER &&
+                    structure.store.getUsedCapacity(RESOURCE_ENERGY) > 0 &&
+                    (structure.store.getUsedCapacity(RESOURCE_ENERGY) / structure.store.getCapacity()) >= 0.7
             });
 
-            if (droppedEnergy) {
-                // Поднимаем энергию
-                if (creep.pickup(droppedEnergy) == ERR_NOT_IN_RANGE) {
-                    creep.moveTo(droppedEnergy, {visualizePathStyle: {stroke: '#ffaa00'}});
+            if (nearbyContainers.length > 0) {
+                const closestContainer = nearbyContainers.sort((a, b) =>
+                    creep.pos.getRangeTo(a) - creep.pos.getRangeTo(b)
+                ).find(container => creep.pos.getRangeTo(container) <= 2);
+
+                if (closestContainer) {
+                    const withdrawResult = creep.withdraw(closestContainer, RESOURCE_ENERGY);
+                    if (withdrawResult === OK) {
+                        creep.memory.waitStartTick = null;
+                        return;
+                    }
                 }
-                return; // После поднятия — не ищем источник
+
+                const container = creep.pos.findClosestByPath(nearbyContainers);
+                if (container) {
+                    creep.moveTo(container, { visualizePathStyle: { stroke: '#ffff00' } });
+                    return;
+                }
             }
 
-            // 2. Если свободной энергии нет, ищем источник
+            // 2. Ищем хранилище (Storage) с ≥5000 ед. энергии
+            const storages = creep.room.find(FIND_MY_STRUCTURES, {
+                filter: (structure) =>
+                    structure.structureType === STRUCTURE_STORAGE &&
+                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 5000
+            });
+
+            if (storages.length > 0) {
+                // Сортируем по расстоянию
+                const closestStorage = storages.sort((a, b) =>
+                    creep.pos.getRangeTo(a) - creep.pos.getRangeTo(b)
+                ).find(storage => creep.pos.getRangeTo(storage) <= 2);
+
+
+                if (closestStorage) {
+                    const withdrawResult = creep.withdraw(closestStorage, RESOURCE_ENERGY);
+                    if (withdrawResult === OK) {
+                        creep.memory.waitStartTick = null;
+                        return;
+                    }
+                }
+
+                // Если нет близко — идём к самому близкому
+                const storage = creep.pos.findClosestByPath(storages);
+                if (storage) {
+                    creep.moveTo(storage, { visualizePathStyle: { stroke: '#ff5500' } }); // Оранжевый цвет пути
+                    return;
+                }
+            }
+
+            // 3. Ищем упавшую энергию (как раньше)
+            const droppedEnergy = creep.room.find(FIND_DROPPED_RESOURCES, {
+                filter: res => res.resourceType === RESOURCE_ENERGY && res.amount > 0
+            });
+
+            if (droppedEnergy.length > 0) {
+                const closestEnergy = droppedEnergy.sort((a, b) =>
+                    creep.pos.getRangeTo(a) - creep.pos.getRangeTo(b)
+                ).find(energy => creep.pos.getRangeTo(energy) <= 2);
+
+
+                if (closestEnergy) {
+                    if (creep.pickup(closestEnergy) === OK) {
+                        creep.memory.waitStartTick = null;
+                        return;
+                    }
+                }
+
+                const energy = creep.pos.findClosestByPath(droppedEnergy);
+                if (energy) {
+                    creep.moveTo(energy, { visualizePathStyle: { stroke: '#ffaa00' } });
+                    return;
+                }
+            }
+
+            // 4. Ищем источник (как раньше)
             let source = null;
             if (!creep.memory.sourceId) {
                 source = sourcesModule.findAvailableSource(creep);
                 if (source) {
                     creep.memory.sourceId = source.id;
                 } else {
-                    // Нет источников в текущей комнате
-                    const targetRoomName = targetRooms[0]; // замените
+                    const targetRoomName = targetRooms[0];
                     if (Game.rooms[targetRoomName]) {
                         creep.moveTo(new RoomPosition(25, 25, targetRoomName));
-                        return;
-                    } else {
-                        // Можно искать источник в другой комнате или стоять
-                        return;
                     }
+                    return;
                 }
             }
             source = Game.getObjectById(creep.memory.sourceId);
             if (source) {
-                const harvestResult = creep.harvest(source);
-                if (harvestResult == ERR_NOT_IN_RANGE) {
-                    creep.moveTo(source, {visualizePathStyle: {stroke: '#ffaa00'}});
-                } else if (harvestResult != OK) {
-                    console.log(`Harvest error: ${harvestResult}`);
-                    if (harvestResult == ERR_NOT_ENOUGH_RESOURCES || harvestResult == ERR_INVALID_TARGET) {
-                        delete creep.memory.sourceId;
+                if (creep.pos.getRangeTo(source) <= 1) {
+                    const harvestResult = creep.harvest(source);
+                    if (harvestResult === OK) {
+                        creep.memory.waitStartTick = null;
+                        return;
                     }
                 }
+                creep.moveTo(source, { visualizePathStyle: { stroke: '#ffaa00' } });
+                return;
             } else {
                 delete creep.memory.sourceId;
+            }
+
+            // Таймер ожидания (как раньше)
+            if (!creep.memory.waitStartTick) {
+                creep.memory.waitStartTick = Game.time;
+            }
+
+            const waitDuration = Game.time - creep.memory.waitStartTick;
+            if (waitDuration >= WAIT_TIMEOUT) {
+                if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+                    creep.memory.state = 'delivering';
+                    creep.memory.waitStartTick = null;
+                    console.log(`${creep.name}: Timeout in harvesting. Switching to delivering with ${creep.store[RESOURCE_ENERGY]} energy`);
+                } else {
+                    console.log(`${creep.name}: Still waiting for resource (${waitDuration} ticks)`);
+                }
             }
         } else if (creep.memory.state === 'delivering') {
             // Используем функцию поиска целей с приоритетами

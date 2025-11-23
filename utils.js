@@ -130,18 +130,34 @@ module.exports = {
     },
 
     findPriorityRepairTarget: (room) => {
-        const repairThresholds = {};
-        repairThresholds[STRUCTURE_WALL] = 5000;
-        repairThresholds[STRUCTURE_RAMPART] = 10000;
-        repairThresholds[STRUCTURE_EXTENSION] = 20000;
-        repairThresholds[STRUCTURE_TOWER] = 15000;
+        // 1. Особые правила для дорог: ремонтируем в первую очередь при HP < 2000
+        const weakRoads = room.find(FIND_STRUCTURES, {
+            filter: (s) =>
+                s.structureType === STRUCTURE_ROAD &&
+                s.hits < 2000 &&
+                s.hits < s.hitsMax
+        });
         
+        if (weakRoads.length > 0) {
+            // Выбираем самую повреждённую дорогу (минимальный процент оставшегося HP)
+            return _.min(weakRoads, (s) => s.hits / s.hitsMax);
+        }
+
+        // 2. Пороговые значения для других структур
+        const repairThresholds = {
+            [STRUCTURE_WALL]: 5000,
+            [STRUCTURE_RAMPART]: 10000,
+            [STRUCTURE_EXTENSION]: 20000,
+            [STRUCTURE_TOWER]: 15000,
+            // Можно добавить другие пороги по необходимости
+        };
+
+        // 3. Приоритетные типы структур (в порядке важности ремонта)
         const priorityTypes = [
             STRUCTURE_EXTENSION,
             STRUCTURE_TOWER,
             STRUCTURE_CONTAINER,
             STRUCTURE_STORAGE,
-            STRUCTURE_WALL,
             STRUCTURE_FACTORY,
             STRUCTURE_LAB,
             STRUCTURE_LINK,
@@ -152,23 +168,28 @@ module.exports = {
             STRUCTURE_TERMINAL,
             STRUCTURE_PORTAL,
             STRUCTURE_RAMPART,
-            STRUCTURE_ROAD,
-            // добавьте нужные типы
+            STRUCTURE_WALL,
+            STRUCTURE_ROAD, // уже обработана выше, но оставляем для полноты
         ];
-    
+
+        // 4. Поиск цели по приоритетам
         for (const type of priorityTypes) {
-            const threshold = repairThresholds[type] || Infinity; // если порог не задан, ремонтируем все
+            const threshold = repairThresholds[type] || Infinity;
+            
             const targets = room.find(FIND_STRUCTURES, {
-                filter: (s) => 
-                    s.structureType === type && 
-                    s.hits < s.hitsMax && 
+                filter: (s) =>
+                    s.structureType === type &&
+                    s.hits < s.hitsMax &&
                     s.hits <= threshold
             });
+
             if (targets.length > 0) {
-                return _.min(targets, (s) => s.hitsMax - s.hits);
+                // Выбираем наиболее повреждённую структуру (минимальный остаток HP)
+                return _.min(targets, (s) => s.hits);
             }
         }
-        return null;
+
+        return null; // Нет целей для ремонта
     },
     
     findContainerWithEnergy: (creep, minEnergy = 150) => {
@@ -177,6 +198,18 @@ module.exports = {
                 structure.structureType === STRUCTURE_CONTAINER && 
                 structure.store.getUsedCapacity(RESOURCE_ENERGY) >= minEnergy
             });
+        if (containers.length > 0) {
+            return creep.pos.findClosestByPath(containers);
+        }
+        return null;
+    },
+
+    findNearestContainerWithEnergy: (creep, minEnergy = 0) => {
+        const containers = creep.room.find(FIND_STRUCTURES, {
+            filter: (structure) => 
+                structure.structureType === STRUCTURE_CONTAINER && 
+                structure.store.getUsedCapacity(RESOURCE_ENERGY) >= minEnergy
+        });
         if (containers.length > 0) {
             return creep.pos.findClosestByPath(containers);
         }
@@ -200,5 +233,129 @@ module.exports = {
 
     countCreepsByRoleAndRoom: (role, roomName) => _.filter(Game.creeps, c => c.memory.role === role && c.memory.homeRoom === roomName).length,
 
-    creepsSum: (roomName) => _.filter(Game.creeps, (creep) => creep.memory.homeRoom === roomName).length
+    creepsSum: (roomName) => _.filter(Game.creeps, (creep) => creep.memory.homeRoom === roomName).length,
+
+    findResourceAndContainerPositions: (creep) => {
+        const room = creep.room;
+        const validPositions = [];
+        const sourceRange = 2; // радиус поиска контейнеров от источника
+
+        // 1. Получаем все источники
+        const sources = room.find(FIND_SOURCES);
+        if (sources.length === 0) {
+            console.log(`${creep.name}: No sources in ${room.name}`);
+            return null;
+        }
+
+        for (const source of sources) {
+            // 2. Ищем контейнеры в радиусе `sourceRange` от источника
+            const nearbyContainers = room.lookForAtArea(
+                LOOK_STRUCTURES,
+                source.pos.y - sourceRange,
+                source.pos.x - sourceRange,
+                source.pos.y + sourceRange,
+                source.pos.x + sourceRange,
+                true
+            ).filter(item => 
+                item.structureType === STRUCTURE_CONTAINER &&
+                !item.structure.destroyed &&
+                item.pos.getRangeTo(source) <= sourceRange
+            );
+
+            for (const container of nearbyContainers) {
+                // 3. Проверяем 8 соседних клеток (включая диагонали)
+                const offsets = [
+                    [1, 0], [-1, 0], [0, 1], [0, -1],
+                    [1, 1], [-1, -1], [1, -1], [-1, 1]
+                ];
+
+                for (const [dx, dy] of offsets) {
+                    const pos = new RoomPosition(
+                        container.pos.x + dx,
+                        container.pos.y + dy,
+                        room.name
+                    );
+
+                    // 4. Границы комнаты
+                    if (pos.x < 0 || pos.x > 49 || pos.y < 0 || pos.y > 49) continue;
+
+                    // Логируем каждую проверяемую клетку
+                    console.log(`Проверка клетки (${pos.x},${pos.y}) относительно контейнера (${container.pos.x},${container.pos.y})`);
+
+                    const look = room.lookAt(pos);
+                    let isBlocked = false;
+                    let isOccupied = false;
+
+                    for (const item of look) {
+                        // Логировать каждый элемент для диагностики
+                        if (item.type) {
+                            console.log(`  Item type: ${item.type}${item.structure ? ', structureType=' + item.structure.structureType : ''}`);
+                        }
+
+                        // a) Стены и непроходимые terrain
+                        if (item.type === 'terrain') {
+                            if (item.terrain === 'wall' || item.terrain === 'swamp') {
+                                isBlocked = true;
+                                break;
+                            }
+                        }
+
+                        // b) Структуры (кроме дорог и контейнеров)
+                        if (item.structure) {
+                            const structureType = item.structure.structureType;
+                            if (![
+                                STRUCTURE_ROAD,
+                                STRUCTURE_CONTAINER
+                            ].includes(structureType)) {
+                                isBlocked = true;
+                                break;
+                            }
+                        }
+
+                        // c) Крипы (включая самого creep, если он ещё не сдвинулся)
+                        if (item.type === 'creep' && item.creep.id !== creep.id) {
+                            isOccupied = true;
+                        }
+
+                        // d) Строительные площадки
+                        if (item.type === 'constructionSite') {
+                            isBlocked = true;
+                            break;
+                        }
+
+                        // e) Упавшие ресурсы (можно игнорировать)
+                    }
+
+                    // Если клетка свободна и не занята
+                    if (!isBlocked && !isOccupied) {
+                        // Логируем подходящую позицию
+                        console.log(`Подходящая позиция: (${pos.x},${pos.y}), расстояние до источника: ${pos.getRangeTo(source)}`);
+                        validPositions.push({
+                            pos,
+                            rangeToSource: pos.getRangeTo(source),
+                            rangeToCreep: pos.getRangeTo(creep.pos)
+                        });
+                    }
+                }
+            }
+        }
+
+        // 6. Сортируем: сначала ближе к источнику, потом к creep
+        validPositions.sort((a, b) => {
+            if (a.rangeToSource !== b.rangeToSource) {
+                return a.rangeToSource - b.rangeToSource;
+            }
+            return a.rangeToCreep - b.rangeToCreep;
+        });
+
+        // 7. Логирование результата для отладки
+        if (validPositions.length > 0) {
+            console.log(`Найдена позиция: ${validPositions[0].pos.x}, ${validPositions[0].pos.y}`);
+        } else {
+            console.log(`${creep.name}: Не удалось найти подходящие позиции.`);
+        }
+
+        // Возвращаем лучшую позицию или null
+        return validPositions.length > 0 ? validPositions[0].pos : null;
+    }
 };

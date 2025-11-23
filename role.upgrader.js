@@ -1,5 +1,5 @@
 const sourcesModule = require('./utils'); // Ваш модуль поиска источников
-const constants = require('./constants');
+const constants = require('./config.constants');
 const myRooms = constants.ROOMS;
 
 module.exports = {
@@ -16,12 +16,12 @@ module.exports = {
 
         // Проверка и смена состояния
         if (state == 'upgrading' && creep.store.getUsedCapacity() === 0) {
-            state = 'harvesting';
+            creep.memory.state = 'harvesting';
             console.log(`${creep.name} switch to harvesting`);
         }
 
         if (state == 'harvesting' && creep.store.getFreeCapacity() === 0) {
-            state = 'upgrading';
+            creep.memory.state = 'upgrading';
             console.log(`${creep.name} switch to upgrading`);
         }
 
@@ -40,7 +40,8 @@ module.exports = {
             // Расширенная логика сбора энергии
 
             // 1. Ищем контейнер с энергией
-            const container = sourcesModule.findContainerWithEnergy(creep);
+            const freeCap = creep.store.getFreeCapacity();
+            const container = sourcesModule.findContainerWithEnergy(creep, freeCap);
             if (container) {
                 // 2. Если есть контейнер, добываем из него
                 if (creep.withdraw(container, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
@@ -70,8 +71,5 @@ module.exports = {
                 return;
             }
         }
-
-        // Обновляем состояние в памяти
-        creep.memory.state = state;
     }
 };

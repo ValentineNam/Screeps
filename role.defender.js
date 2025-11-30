@@ -1,6 +1,5 @@
 const sourcesModule = require('./utils');
 const constants = require('./config.constants');
-const myRooms = constants.ROOMS;
 
 // Обновление списка врагов в памяти
 module.exports = {
@@ -9,25 +8,16 @@ module.exports = {
         if (!creep.memory.state) {
             creep.memory.state = 'patrol';
         }
-        if (!creep.memory.routePoints || (creep.memory.routePoint == [])) {
-            switch (creep.memory.homeRoom) {
-              case 'E19S8':
-                creep.memory.routePoints = [
-                    { x: 13, y: 19, roomName: 'E19S8' },
-                    { x: 18, y: 9, roomName: 'E19S8' },
-                    { x: 18, y: 15, roomName: 'E19S8' },
-                    { x: 13, y: 15, roomName: 'E19S8' },
-                ]
-                break;
-              default:
-                creep.memory.routePoints = [
-                    { x: 11, y: 13, roomName: creep.memory.targetRoom },
-                    { x: 14, y: 13, roomName: creep.memory.targetRoom },
-                    { x: 14, y: 16, roomName: creep.memory.targetRoom },
-                    { x: 11, y: 16, roomName: creep.memory.targetRoom },
-                ]
-                break;
-            }
+
+        const targetPoints = [
+                    { x: 20, y: 20, roomName: creep.memory.targetRoom },
+                    { x: 20, y: 30, roomName: creep.memory.targetRoom },
+                    { x: 30, y: 30, roomName: creep.memory.targetRoom },
+                    { x: 30, y: 20, roomName: creep.memory.targetRoom }
+                ];
+
+        if (!creep.memory.routePoints || (creep.memory.routePoint == []) || (creep.memory.routePoints !== targetPoints)) {
+            creep.memory.routePoints = targetPoints;
         }
         
         if (creep.memory.attackCooldown === undefined) {
@@ -141,3 +131,131 @@ module.exports = {
         }
     }
 };
+
+// module.exports = {
+//     run: (creep) => {
+//         // Инициализация (как было)
+//         if (!creep.memory.state) {
+//             creep.memory.state = 'patrol';
+//         }
+
+//                 const targetPoints = [
+//                     { x: 20, y: 20, roomName: creep.memory.targetRoom },
+//                     { x: 20, y: 30, roomName: creep.memory.targetRoom },
+//                     { x: 30, y: 30, roomName: creep.memory.targetRoom },
+//                     { x: 30, y: 20, roomName: creep.memory.targetRoom }
+//                 ];
+// //         if (!creep.memory.routePoints || creep.memory.routePoints.length === 0) {
+//             creep.memory.routePoints = targetPoints;
+//         }
+
+//         if (creep.memory.attackCooldown === undefined) {
+//             creep.memory.attackCooldown = 2;
+//         }
+
+//         // Получаем врагов из памяти
+//         const roomName = creep.room.name;
+//         const enemyIds = (Memory.rooms[roomName].enemies) || [];
+//         const enemies = enemyIds
+//             .map(id => Game.getObjectById(id))
+//             .filter(e => e !== null);
+
+//         // Сортируем врагов
+//         const sortedEnemies = enemies.length > 0 
+//             ? sourcesModule.sortEnemiesByHealParts(enemies)
+//             : [];
+//         const targetEnemy = sortedEnemies.length > 0 ? sortedEnemies[0] : null;
+
+//         // Проверяем наличие угроз
+//         const hasEnemies = enemies.length > 0;
+//         const hasHostileStructures = creep.room.find(FIND_STRUCTURES, {
+//             filter: s => s.structureType === STRUCTURE_INVADER_CORE || (s.owner && !s.my)
+//         }).length > 0;
+
+//         // Переключаем состояние
+//         if (hasEnemies || hasHostileStructures) {
+//             if (creep.memory.state !== 'attack') {
+//                 creep.memory.state = 'attack';
+//                 creep.say('⚔ ATTACK');
+//                 console.log(`${creep.name} switches to attack mode`);
+//             }
+//             creep.memory.attackCooldown = 5;
+//         } else {
+//             if (creep.memory.attackCooldown > 0) {
+//                 creep.memory.attackCooldown--;
+//             } else if (creep.memory.state !== 'patrol') {
+//                 creep.memory.state = 'patrol';
+//                 creep.say('🛡️ PATROL');
+//                 console.log(`${creep.name} switches to patrol mode`);
+//             }
+//         }
+
+//         // Режим атаки — выполняем первым и прерываем выполнение
+//         if (creep.memory.state === 'attack') {
+//             // 1. Атакуем врага
+//             if (targetEnemy) {
+//                 const attackResult = creep.attack(targetEnemy);
+//                 if (attackResult === ERR_NOT_IN_RANGE) {
+//                     creep.moveTo(targetEnemy, {
+//                         visualizePathStyle: { stroke: '#ff0000' },
+//                         maxOps: 50
+//                     });
+//                 }
+//                 return; // Прерываем выполнение — не идём в patrol
+//             }
+
+//             // 2. Атакуем Invader Core
+//             const invaderCore = creep.room.find(FIND_STRUCTURES, {
+//                 filter: s => s.structureType === STRUCTURE_INVADER_CORE
+//             })[0];
+//             if (invaderCore) {
+//                 const attackResult = creep.attack(invaderCore);
+//                 if (attackResult === ERR_NOT_IN_RANGE) {
+//                     creep.moveTo(invaderCore, {
+//                         visualizePathStyle: { stroke: '#ff4500' },
+//                         maxOps: 50
+//                     });
+//                 }
+//                 return; // Прерываем выполнение
+//             }
+
+//             // 3. Атакуем другие враждебные структуры
+//             const hostileStructures = creep.room.find(FIND_STRUCTURES, {
+//                 filter: s => s.owner && !s.my
+//             });
+//             if (hostileStructures.length > 0) {
+//                 const target = creep.pos.findClosestByRange(hostileStructures);
+//                 const attackResult = creep.attack(target);
+//                 if (attackResult === ERR_NOT_IN_RANGE) {
+//                     creep.moveTo(target, {
+//                         visualizePathStyle: { stroke: '#ff6347' },
+//                         maxOps: 50
+//                     });
+//                 }
+//                 return; // Прерываем выполнение
+//             }
+//         }
+
+//         // Режим патрулирования — выполняется только если не в атаке
+//         if (creep.memory.state === 'patrol') {
+//             const routePoints = creep.memory.routePoints;
+//             if (routePoints.length === 0) return;
+
+//             if (creep.memory.routeIndex === undefined) {
+//                 creep.memory.routeIndex = 0;
+//             }
+
+//             const targetPos = routePoints[creep.memory.routeIndex];
+//             const targetPosObj = new RoomPosition(targetPos.x, targetPos.y, targetPos.roomName);
+
+//             if (creep.pos.isEqualTo(targetPosObj)) {
+//                 creep.memory.routeIndex = (creep.memory.routeIndex + 1) % routePoints.length;
+//             } else {
+//                 creep.moveTo(targetPosObj, {
+//                     visualizePathStyle: { stroke: '#00ff00' },
+//                     maxOps: 50
+//                 });
+//             }
+//         }
+//     }
+// }

@@ -9,7 +9,7 @@ module.exports = {
         }
         
         if (!creep.memory.homeRoom) {
-            creep.memory.homeRoom = myRooms[0]; // ваша основная комната
+            creep.memory.homeRoom = creep.room.name; // ваша основная комната
         }
 
         let state = creep.memory.state;
@@ -48,6 +48,36 @@ module.exports = {
                     creep.moveTo(container, {visualizePathStyle: {stroke: '#ffaa00'}});
                 }
                 return; // После этого не ищем источник
+            }
+
+            // 2. Ищем хранилище (Storage) с ≥5000 ед. энергии
+            const storages = creep.room.find(FIND_MY_STRUCTURES, {
+                filter: (structure) =>
+                    structure.structureType === STRUCTURE_STORAGE &&
+                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 3000
+            });
+
+            if (storages.length > 0) {
+                // Сортируем по расстоянию
+                const closestStorage = storages.sort((a, b) =>
+                    creep.pos.getRangeTo(a) - creep.pos.getRangeTo(b)
+                ).find(storage => creep.pos.getRangeTo(storage) <= 2);
+
+
+                if (closestStorage) {
+                    const withdrawResult = creep.withdraw(closestStorage, RESOURCE_ENERGY);
+                    if (withdrawResult === OK) {
+                        creep.memory.waitStartTick = null;
+                        return;
+                    }
+                }
+
+                // Если нет близко — идём к самому близкому
+                const storage = creep.pos.findClosestByPath(storages);
+                if (storage) {
+                    creep.moveTo(storage, { visualizePathStyle: { stroke: '#ff5500' } }); // Оранжевый цвет пути
+                    return;
+                }
             }
 
             // 3. Если контейнера нет, ищем источник энергии

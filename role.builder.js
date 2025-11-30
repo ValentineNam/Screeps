@@ -75,28 +75,35 @@ module.exports = {
                 return;
             }
 
-            // в) Источник
-            let source = null;
+            // в) Ищем ближайший доступный источник
             if (!creep.memory.sourceId) {
                 source = sourcesModule.findAvailableSource(creep);
-                if (source) {
-                    creep.memory.sourceId = source.id;
-                } else {
+                
+                if (!source) {
                     console.log(`${creep.name} no source found`);
                     return;
                 }
-            }
-            source = Game.getObjectById(creep.memory.sourceId);
-            if (source) {
-                const result = creep.harvest(source);
-                if (result === ERR_NOT_IN_RANGE) {
-                    creep.moveTo(source, { visualizePathStyle: { stroke: '#ffaa00' } });
-                } else if (result !== OK) {
-                    console.log(`Harvest error: ${result}`);
-                    delete creep.memory.sourceId;
-                }
+                
+                creep.memory.sourceId = source.id;
             } else {
-                delete creep.memory.sourceId;
+                source = Game.getObjectById(creep.memory.sourceId);
+                if (!source) {
+                    console.log(`${creep.name} source memory invalid, clearing`);
+                    delete creep.memory.sourceId;
+                    return;
+                }
+            }
+
+            // Работаем с выбранным источником
+            const result = creep.harvest(source);
+            if (result === ERR_NOT_IN_RANGE) {
+                creep.moveTo(source, {
+                    visualizePathStyle: { stroke: '#ffaa00' },
+                    reusePath: 5
+                });
+            } else if (result !== OK) {
+                console.log(`Harvest error: ${result}`);
+                delete creep.memory.sourceId; // сбрасываем память при ошибке
             }
         }
 

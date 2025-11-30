@@ -1,4 +1,4 @@
-const utils = require('./services/utils');
+const utils = require('./utils');
 
 // Определите желаемый порядок ролей (можно менять)
 const DEFAULT_ROLE_ORDER = [
@@ -10,7 +10,7 @@ const DEFAULT_ROLE_ORDER = [
     'healer',
     'towerman',
     'upgrader',
-    'hardvester'
+    'remoteHarvester'
 ];
 
 function padLabel(label, padTo = 16) {

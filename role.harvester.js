@@ -2,13 +2,11 @@ const sourcesModule = require('./utils');
 const constants = require('./config.constants');
 const myRooms = constants.ROOMS;
 
-const targetRooms = ['E19S7'];
-
 module.exports = {
     run: (creep) => {
         // 1. Инициализация памяти (все необходимые флаги)
         if (!creep.memory.homeRoom) creep.memory.homeRoom = myRooms[0];
-        if (!creep.memory.targetRoom) creep.memory.targetRoom = targetRooms[0];
+        if (!creep.memory.targetRoom) creep.memory.targetRoom = creep.room.name;
         if (!creep.memory.state) creep.memory.state = 'harvesting';
         if (!creep.memory.returningHome) creep.memory.returningHome = false;
         if (!creep.memory.enteredTargetRoom) creep.memory.enteredTargetRoom = false;
@@ -65,6 +63,36 @@ module.exports = {
                     console.log(`${creep.name}: Вошёл в целевую комнату ${targetRoom}`);
                 }
             }
+            
+            // 2. Ищем хранилище (Storage) с ≥5000 ед. энергии
+            const storages = creep.room.find(FIND_MY_STRUCTURES, {
+                filter: (structure) =>
+                    structure.structureType === STRUCTURE_STORAGE &&
+                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 5000
+            });
+
+            if (storages.length > 0) {
+                // Сортируем по расстоянию
+                const closestStorage = storages.sort((a, b) =>
+                    creep.pos.getRangeTo(a) - creep.pos.getRangeTo(b)
+                ).find(storage => creep.pos.getRangeTo(storage) <= 2);
+
+
+                if (closestStorage) {
+                    const withdrawResult = creep.withdraw(closestStorage, RESOURCE_ENERGY);
+                    if (withdrawResult === OK) {
+                        creep.memory.waitStartTick = null;
+                        return;
+                    }
+                }
+
+                // Если нет близко — идём к самому близкому
+                const storage = creep.pos.findClosestByPath(storages);
+                if (storage) {
+                    creep.moveTo(storage, { visualizePathStyle: { stroke: '#ff5500' } }); // Оранжевый цвет пути
+                    return;
+                }
+            }
 
             // 5.2. Поиск и подбор dropped energy (в радиусе 10 клеток)
             const droppedEnergy = creep.pos.findInRange(FIND_DROPPED_RESOURCES, 10, {
@@ -96,6 +124,7 @@ module.exports = {
                         reusePath: 5,
                         visualizePathStyle: { stroke: '#ffff00' }
                     });
+                    delete creep.memory.sourceId;
                     return;
                 }
             }

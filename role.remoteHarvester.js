@@ -2,12 +2,6 @@ const sourcesModule = require('./utils');
 const constants = require('./config.constants');
 const myRooms = constants.ROOMS;
 
-/* 
-Объявим массив целевых комнат. Пока один элемент, 
-но можно расширять для сложных сценариев.
-*/
-const targetRooms = ['E19S7']; 
-
 module.exports = {
     run: (creep) => {
         // Инициализация состояния
@@ -16,7 +10,7 @@ module.exports = {
         }
 
         if (!creep.memory.homeRoom) {
-            creep.memory.homeRoom = myRooms[0]; // ваша основная комната
+            creep.memory.homeRoom = creep.room.name; // ваша основная комната
         }
 
         // Установка целевой комнаты, если еще не задана
@@ -24,7 +18,7 @@ module.exports = {
             // Базовая логика для назначения целевой комнаты
             // Например, берем из массива targetRooms первый элемент
             // Можно усложнить — переключать по мере заполнения
-            creep.memory.targetRoom = targetRooms[0];
+            creep.memory.targetRoom = creep.room.name;
         }
         
         // -- отправить в комнату --
@@ -34,7 +28,6 @@ module.exports = {
         if ((creep.room.name !== targetRoom) && creep.store.getUsedCapacity() == 0) {
             const targetPos = new RoomPosition(32, 19, targetRoom);
             creep.moveTo(targetPos, {visualizePathStyle: {stroke: '#ffaa00'}, range: 3});
-            creep.memory.attackCooldown = 2;
             return; // ждем прибытия
         }
         // -- отправить в комнату --
@@ -121,9 +114,6 @@ module.exports = {
                 if (creep.room.name !== creep.memory.homeRoom) {
                     const homePos = new RoomPosition(25, 25, creep.memory.homeRoom);
                     creep.moveTo(homePos, { visualizePathStyle: { stroke: '#ffffff' } });
-                // } else {
-                //     const targetRoom = targetRooms[0];
-                //     creep.moveTo(new RoomPosition(18, 29, targetRoom), { visualizePathStyle: { stroke: '#ffaa00' } });
                 }
             }
         }

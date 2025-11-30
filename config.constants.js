@@ -18,11 +18,11 @@ const BODY_780P_DEFENDER = [
     ATTACK, MOVE
 ];
 const BODY_1300P_DEFENDER = [
-    // TOUGH, TOUGH, TOUGH, TOUGH, TOUGH, MOVE, MOVE, MOVE, MOVE, MOVE, 
     MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, 
     MOVE, MOVE, MOVE, ATTACK, ATTACK, ATTACK, ATTACK, ATTACK, ATTACK, ATTACK,
     ATTACK, ATTACK, ATTACK, MOVE
 ];
+
 const BODY_1800P_DEFENDER = [
     TOUGH, TOUGH, TOUGH, TOUGH, TOUGH, MOVE, MOVE, MOVE, MOVE, MOVE, 
     MOVE, MOVE, MOVE, MOVE, MOVE, ATTACK, ATTACK, ATTACK, ATTACK, ATTACK,
@@ -30,7 +30,8 @@ const BODY_1800P_DEFENDER = [
     MOVE
 ];
 
-const CLAIMER_650P_CREEP = [CLAIM, MOVE, MOVE];
+const CLAIMER_600P_CREEP = [CLAIM, MOVE];
+const CLAIMER_650P_CREEP = [CLAIM, MOVE];
 const CLAIMER_1300P_CREEP = [CLAIM, CLAIM, MOVE, MOVE];
 const CLAIMER_1900P_CREEP = [CLAIM, CLAIM, CLAIM, MOVE, MOVE];
 
@@ -72,14 +73,15 @@ const BODY_550P_HEALER = [HEAL, HEAL, MOVE];
 const BODY_930P_HEALER = [TOUGH, TOUGH, TOUGH, MOVE, MOVE, HEAL, HEAL, HEAL, MOVE];
 
 const CREEPS_BODIES = {
-    worker: [BODY_200P_WORKER, BODY_300P_WORKER, BODY_550P_WORKER, BODY_800P_WORKER, BODY_1000P_WORKER, BODY_1300P_WORKER],
+    worker: [BODY_300P_WORKER, BODY_550P_WORKER, BODY_800P_WORKER, BODY_1000P_WORKER, BODY_1300P_WORKER],
     // worker: [BODY_200P_WORKER, BODY_550P_WORKER, BODY_800P_WORKER, BODY_1000P_WORKER, BODY_1300P_WORKER],
     // remoteHarvester: [BODY_300P_WORKER, BODY_550P_WORKER, BODY_800P_WORKER, BODY_1000P_WORKER],
     remoteHarvester: [BODY_550P_WORKER, BODY_800P_WORKER, BODY_1000P_WORKER],
     // defender: [BODY_300P_DEFENDER, BODY_550P_DEFENDER, BODY_780P_DEFENDER, BODY_1300P_DEFENDER, BODY_1800P_DEFENDER],
-    defender: [BODY_550P_DEFENDER, BODY_780P_DEFENDER, BODY_1300P_DEFENDER, BODY_1800P_DEFENDER],
-    claimer: [CLAIMER_650P_CREEP, CLAIMER_1300P_CREEP, CLAIMER_1900P_CREEP],
+    defender: [BODY_300P_DEFENDER, BODY_550P_DEFENDER, BODY_780P_DEFENDER, BODY_1300P_DEFENDER, BODY_1800P_DEFENDER],
+    claimer: [CLAIMER_600P_CREEP, CLAIMER_650P_CREEP, CLAIMER_1300P_CREEP, CLAIMER_1900P_CREEP],
     healer: [BODY_550P_HEALER],
+    scout: [[MOVE], [MOVE, MOVE]],
     // logist: [BODY_300P_LOGIST, BODY_550P_LOGIST, BODY_800P_LOGIST, BODY_1300P_LOGIST],
     logist: [BODY_300P_LOGIST, BODY_550P_LOGIST, BODY_800P_LOGIST, BODY_1300P_LOGIST, BODY_1800P_LOGIST],
     miner: [BODY_500P_MINER, BODY_550P_MINER, BODY_750P_MINER, BODY_1250P_MINER],
@@ -105,13 +107,18 @@ const BODYPART_COST = {
 const DESIRED_COUNTS = [
     {
         homeRoom: 'E19S8',
+        baseCoverage: {
+            harvesterRatio: 0.8,
+            upgraderRatio: 0.6
+        },
         creeps: {
+            scout: 0,
             harvester: 4,
             upgrader: 3,
-            builder: 1,
+            builder: 2,
             defender: 0,
             guardian: 0,
-            claimer: 1,
+            claimer: 0,
             healer: 0,
             towerman: 1,
             miner: 0,
@@ -123,21 +130,17 @@ const DESIRED_COUNTS = [
                 rooms: ['E19S7', 'E19S9', 'E18S8', 'E18S7', 'E17S8']
             },
             remoteBuilder: {
-                count: 2,
-                rooms: ['E19S7', 'E19S9', 'E18S8', 'E18S7', 'E17S8']
-                // rooms: ['E17S5','E18S5','E19S7', 'E19S9', 'E18S8', 'E18S7', 'E17S8']
-            },
-                crawler: {
                 count: 1,
                 rooms: ['E19S7', 'E19S9', 'E18S8', 'E18S7', 'E17S8']
-                // rooms: ['E19S7', 'E19S9', 'E18S8', 'E17S8']
+            },
+            crawler: {
+                count: 1,
+                rooms: ['E19S7', 'E19S9', 'E17S8', 'E18S7', 'E18S8']
             },
             defender: {
                 count: 1,
-                // rooms: ['E18S8']
-                rooms: ['E17S5', 'E19S7', 'E19S9', 'E18S8', 'E18S7', 'E17S8']
+                rooms: ['E19S7', 'E19S9', 'E18S8', 'E18S7', 'E17S8']
             },
-
             miner: {
                 count: 0,
                 rooms: ['E19S7', 'E19S9', 'E18S8', 'E18S7']
@@ -147,9 +150,15 @@ const DESIRED_COUNTS = [
                 rooms: ['E19S7', 'E19S9', 'E18S8', 'E18S7', 'E17S8']
             }
         }
-    }, {
+    },
+    {
         homeRoom: 'E17S5',
+        baseCoverage: {
+            harvesterRatio: 0.8,
+            upgraderRatio: 0.6
+        },
         creeps: {
+            scout: 0,
             harvester: 4,
             upgrader: 4,
             builder: 3,
@@ -157,36 +166,73 @@ const DESIRED_COUNTS = [
             guardian: 0,
             claimer: 0,
             healer: 0,
-            towerman: 0,
+            towerman: 1,
+            miner: 0,
+            crawler: 0,
+        },
+        remoteCreeps: {
+            remoteBuilder: {
+                count: 1,
+                rooms: ['E17S4', 'E18S5', 'E17S6']
+            },
+            remoteHarvester: {
+                count: 2,
+                rooms: ['E17S4', 'E18S5', 'E17S6']
+            },
+            crawler: {
+                count: 1,
+                rooms: ['E17S4', 'E18S5', 'E17S6']
+            },
+            defender: {
+                count: 1,
+                rooms: ['E18S5', 'E17S4', 'E17S6']
+            },
+            claimer: {
+                count: 0,
+                rooms: ['E17S6', 'E18S5', 'E17S4']
+            }
+        }
+    },
+    {
+        homeRoom: 'E19N1',
+                baseCoverage: {
+            harvesterRatio: 0.8,
+            upgraderRatio: 0.6
+        },
+        creeps: {
+            scout: 0,
+            harvester: 4,
+            upgrader: 4,
+            builder: 3,
+            defender: 1,
+            guardian: 0,
+            claimer: 0,
+            healer: 0,
+            towerman: 1,
             miner: 0,
             crawler: 0
         },
         remoteCreeps: {
+            remoteBuilder: {
+                count: 1,
+                rooms: ['E18N1','E19N2']
+            },
             remoteHarvester: {
                 count: 2,
-                rooms: ['E17S4','E18S5','E17S6']
-            },
-            remoteBuilder: {
-                count: 2,
-                rooms: ['E17S4','E18S5','E17S6']
+                rooms: ['E18N1','E19N2']
             },
             crawler: {
                 count: 1,
-                 rooms: ['E18S5','E17S6','E17S4']
+                rooms: ['E18N1','E19N2']
             },
-            // defender: {
-            //     count: 0,
-            //     // rooms: ['E17S4']
-            //     rooms: ['E19S7', 'E19S9', 'E18S8', 'E18S7', 'E17S8']
-            // },
-            // miner: {
-            //     count: 0,
-            //     // rooms: ['E17S4']
-            // },
-            // claimer: {
-            //     count: 0,
-            //     // rooms: ['E17S4']
-            // }
+            defender: {
+                count: 1,
+                rooms: ['E18N1','E19N2']
+            },
+            claimer: {
+                count: 0,
+                rooms: ['E18N1','E19N2']
+            }
         }
     }
 ];

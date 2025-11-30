@@ -4,15 +4,37 @@ module.exports = {
     },
 
     findAvailableSource: (creep) => {
+        if (!creep || !creep.room) return null;
+
         const sources = creep.room.find(FIND_SOURCES_ACTIVE);
-        for (let source of sources) {
-            const creepsUsingSource = _.filter(Game.creeps, c => c.memory.sourceId === source.id);
-            if (creepsUsingSource.length === 0) {
-                return source; // источник свободен
-            }
+        if (sources.length === 0) return null;
+
+        // Есть лимит, сколько крипов может добывать один источник одновременно
+        const maxCreepsPerSource = 1; // Можно изменить по вашему сценарию
+
+        // Подсчёт занятости источников
+        const sourceUsage = {};
+        for (const source of sources) {
+            const creepsUsing = _.filter(Game.creeps, c =>
+                c.memory.sourceId === source.id &&
+                c.room.name === creep.room.name
+            );
+            sourceUsage[source.id] = creepsUsing.length;
         }
-        // Если все заняты, возвращаем ближайший источник
-        return creep.pos.findClosestByPath(sources);
+
+        // Фильтруем источники, у которых число крипов меньше maxCreepsPerSource
+        const freeSources = sources.filter(s => sourceUsage[s.id] < maxCreepsPerSource);
+
+        // Если есть свободные источники — выбираем ближайший из них
+        if (freeSources.length > 0) {
+            return creep.pos.findClosestByPath(freeSources, { ignoreCreeps: true });
+        }
+
+        // Все источники заняты, можно вернуть null или выбрать в любом случае
+        // Например, можно выбрать источник с минимальной занятость:
+        const minUsage = Math.min(...Object.values(sourceUsage));
+        const candidateSources = sources.filter(s => sourceUsage[s.id] === minUsage);
+        return creep.pos.findClosestByPath(candidateSources, { ignoreCreeps: true });
     },
 
     // Поиск приоритетных зданий для передачи ресурсов
@@ -357,5 +379,39 @@ module.exports = {
 
         // Возвращаем лучшую позицию или null
         return validPositions.length > 0 ? validPositions[0].pos : null;
+    },
+
+    countCreepsByRole: (role, homeRoom, targetRoom = null) => {
+        return _.filter(Game.creeps, creep => {
+            if (creep.memory.role !== role) return false;
+            if (creep.memory.homeRoom !== homeRoom) return false;
+            return !targetRoom || creep.memory.targetRoom === targetRoom;
+        }).length;
+    },
+
+    hasContainerInRoom: (roomName) => {
+        const room = Game.rooms[roomName];
+        if (!room) return false;
+        return room.find(FIND_STRUCTURES, {
+            filter: s => s.structureType === STRUCTURE_CONTAINER
+        }).length > 0;
+    },
+
+    getThreatLevel: (roomName) => {
+        const room = Game.rooms[roomName];
+        if (!room) return 0;
+
+        let threat = 0;
+        threat += room.find(FIND_HOSTILE_CREEPS).length * 10;
+        
+        if (room.find(FIND_STRUCTURES, {
+            filter: s => s.structureType === STRUCTURE_INVADER_CORE
+        }).length > 0) {
+            threat += 100;
+        }
+
+        return threat;
     }
+
+
 };

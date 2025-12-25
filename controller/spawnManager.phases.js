@@ -63,7 +63,7 @@ function attemptSpawn(spawn, body, name, mem, ctx, role, reason) {
             bodyCost: cost
         };
         recordSpawnDecision(roomName, entry);
-        log('INFO', `[spawnManager:${roomName}] Spawned ${entry.role} (${reason || 'spawn'}) ${name} -> ${entry.targetRoom} cost=${cost}`, spawn);
+        log('INFO', `: ${roomName} Spawned ${entry.role} (${reason || 'spawn'}) ${name} -> ${entry.targetRoom} cost=${cost}`, 'spawnManager');
         // keep the pending entry as a representation of an in-progress spawn (will be pruned later)
         return true;
     } else {
@@ -356,18 +356,18 @@ function tryRemoteReplacementPhase(spawn, ctx) {
 function selectTargetRoom(homeRoom, role) {
     const config = creepCounting.getRoomConfig(homeRoom);
     if (!config) {
-        log('WARN', `[spawnManager] Нет конфигурации для комнаты ${homeRoom}`, homeRoom);
+        log('WARN', `Нет конфигурации для комнаты ${homeRoom}`, 'spawnManager');
         return null;
     }
 
     if (!config.remoteCreeps || !config.remoteCreeps[role]) {
-        log('WARN', `[spawnManager] Нет remoteCreeps.${role} для комнаты ${homeRoom}`, homeRoom);
+        log('WARN', `Нет remoteCreeps.${role} для комнаты ${homeRoom}`, 'spawnManager');
         return null;
     }
 
     const { rooms } = config.remoteCreeps[role];
     if (!rooms || rooms.length === 0) {
-        log('WARN', `[spawnManager] Пустой список rooms для ${role} в ${homeRoom}`, homeRoom);
+        log('WARN', `Пустой список rooms для ${role} в ${homeRoom}`, 'spawnManager');
         return null;
     }
 
@@ -378,7 +378,7 @@ function selectTargetRoom(homeRoom, role) {
     if (role === 'crawler') {
         candidateRooms = candidateRooms.filter(r => roomData.hasContainerInRoom(r));
         if (candidateRooms.length === 0) {
-            log('INFO', `[spawnManager] Нет комнат с контейнером для crawler`, homeRoom);
+            log('INFO', `Нет комнат с контейнером для crawler`, 'spawnManager');
             return null;
         }
     }
@@ -428,7 +428,7 @@ function tryLocalPhase(spawn, ctx, allowSmall) {
         const currentMiners = creepCounting.countCreepsByRole('miner', roomName, roomName);
         const currentUpgraders = creepCounting.countCreepsByRole('upgrader', roomName);
         const hasContainers = roomData.hasContainerInRoom(roomName);
-        log('DEBUG', `[spawnManager:${roomName}] localCounts harv=${currentHarvesters} miner=${currentMiners} upg=${currentUpgraders} localTotal=${ctx.localCreepsCount} containers=${hasContainers} energy=${ctx.energy}/${ctx.energyCapacity} allowSmall=${allowSmall}`, roomName);
+        log('DEBUG', `: ${roomName}] localCounts harv=${currentHarvesters} miner=${currentMiners} upg=${currentUpgraders} localTotal=${ctx.localCreepsCount} containers=${hasContainers} energy=${ctx.energy}/${ctx.energyCapacity} allowSmall=${allowSmall}`, 'spawnManager');
 
         // Проверяем, есть ли контейнеры возле источников
         const sourceContainers = Game.rooms[roomName] ? roomData.getSourceContainers(roomName) : [];
@@ -619,7 +619,7 @@ function tryRemotePhase(spawn, ctx, allowSmall) {
                 const allowSmallForRemote = false;
                 let body = spawnManagerCore.pickBody('logist', ctx.energy, ctx.energyCapacity, allowSmallForRemote, ctx);
                 if (!body) {
-                    log('DEBUG', `Skip crawler -> no body fits in ${roomName} (energy ${ctx.energy}/${ctx.energyCapacity})`, roomName);
+                    log('DEBUG', `Skip crawler -> no body fits in ${roomName} (energy ${ctx.energy}/${ctx.energyCapacity})`, 'spawnManager');
                     continue;
                 }
                 const mem = spawnManagerCore.memoryFactories.crawler ? spawnManagerCore.memoryFactories.crawler(ctx) : spawnManagerCore.baseMemory('crawler', ctx);

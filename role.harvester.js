@@ -1,6 +1,8 @@
-const sourcesModule = require('./utils');
 const baseRole = require('./role.base');
 const constants = require('./config.constants');
+const utils = require('./utils');
+const sourcesModule = utils;
+const { log } = utils;
 const myRooms = constants.ROOMS;
 
 module.exports = {
@@ -20,7 +22,7 @@ module.exports = {
         // 2. Проверка доступности целевой комнаты
         const roomStatus = Game.map.getRoomStatus(targetRoom);
         if (roomStatus.status !== 'normal') {
-            console.log(`${creep.name}: Целевая комната ${targetRoom} недоступна (статус: ${roomStatus.status})`);
+            log('WARN', `Целевая комната ${targetRoom} недоступна (статус: ${roomStatus.status})`, creep);
             creep.memory.returningHome = true;
             creep.memory.enteredTargetRoom = false;
             return;
@@ -73,7 +75,7 @@ module.exports = {
                     return;
                 } else {
                     creep.memory.enteredTargetRoom = true;
-                    console.log(`${creep.name}: Вошёл в целевую комнату ${targetRoom}`);
+                    log('INFO', `Вошёл в целевую комнату ${targetRoom}`, creep);
                 }
             }
 
@@ -148,7 +150,7 @@ module.exports = {
                     visualizePathStyle: { stroke: '#ffaa00' }
                 });
             } else if (harvestResult !== OK) {
-                console.log(`${creep.name}: Ошибка сбора: ${harvestResult}`);
+                log('WARN', `Ошибка сбора: ${harvestResult}`, creep);
                 delete creep.memory.sourceId;  // сбрасываем, чтобы на следующем тике искать новый
             }
         }

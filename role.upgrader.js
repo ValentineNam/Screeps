@@ -1,6 +1,8 @@
-const sourcesModule = require('./utils'); // Ваш модуль поиска источников
 const baseRole = require('./role.base');
 const constants = require('./config.constants');
+const utils = require('./utils');
+const sourcesModule = utils;
+const { log } = utils;
 const myRooms = constants.ROOMS;
 
 module.exports = {
@@ -36,12 +38,12 @@ module.exports = {
         // Проверка и смена состояния
         if (state == 'upgrading' && creep.store.getUsedCapacity() === 0) {
             creep.memory.state = 'harvesting';
-            console.log(`${creep.name} switch to harvesting`);
+            log('DEBUG', `switch to harvesting`, creep);
         }
 
         if (state == 'harvesting' && creep.store.getFreeCapacity() === 0) {
             creep.memory.state = 'upgrading';
-            console.log(`${creep.name} switch to upgrading`);
+            log('DEBUG', `switch to upgrading`, creep);
         }
 
         // Выполнение действий в зависимости от состояния
@@ -92,7 +94,7 @@ module.exports = {
             }
 
             // 4. Если источников нет, ищем дропы
-            console.log(`${creep.name} no sources or containers available`);
+            log('WARN', `no sources or containers available`, creep);
             const droppedEnergy = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
                 filter: (res) => res.resourceType === RESOURCE_ENERGY && res.amount > 0
             });

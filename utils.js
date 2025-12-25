@@ -1,3 +1,106 @@
+/**
+ * Logging system with configurable levels
+ */
+
+// Define log levels
+const LOG_LEVELS = {
+    ERROR: 0,
+    WARN: 1,
+    INFO: 2,
+    DEBUG: 3
+};
+
+// Initialize log levels configuration in Memory
+if (!Memory.logs) {
+    Memory.logs = {
+        ERROR: true,
+        WARN: true,
+        INFO: false,
+        DEBUG: false
+    };
+}
+
+/**
+ * Log a message if the specified log level is enabled
+ * @param {string} level - The log level (ERROR, WARN, INFO, DEBUG)
+ * @param {string} message - The message to log
+ * @param {string|RoomObject} [source] - Optional source (room name or creep/structure reference)
+ */
+function log(level, message, source = null) {
+    // Check if this log level is enabled
+    if (!Memory.logs[level]) {
+        return;
+    }
+
+    // Format the message with source if provided
+    let formattedMessage = message;
+    if (source) {
+        if (typeof source === 'string') {
+            formattedMessage = `[${source}] ${message}`;
+        } else if (source.name) {
+            formattedMessage = `[${source.name}] ${message}`;
+        } else if (source.pos) {
+            formattedMessage = `[${source.pos.roomName}] ${message}`;
+        } else {
+            formattedMessage = `[${source}] ${message}`;
+        }
+    }
+
+    // Output the log based on level
+    switch (level) {
+        case 'ERROR':
+            console.log(`[${level}] ${formattedMessage}`);
+            break;
+        case 'WARN':
+            console.log(`[${level}] ${formattedMessage}`);
+            break;
+        case 'INFO':
+            console.log(`[${level}] ${formattedMessage}`);
+            break;
+        case 'DEBUG':
+            console.log(`[${level}] ${formattedMessage}`);
+            break;
+        default:
+            console.log(`[${level}] ${formattedMessage}`);
+    }
+}
+
+/**
+ * Set log level enabled/disabled
+ * @param {string} level - The log level to set
+ * @param {boolean} enabled - Whether the level should be enabled (default: true)
+ */
+function setLogLevel(level, enabled = true) {
+    if (LOG_LEVELS.hasOwnProperty(level)) {
+        Memory.logs[level] = enabled;
+        log('INFO', `Log level ${level} set to ${enabled}`, 'System');
+    } else {
+        log('ERROR', `Invalid log level: ${level}`, 'System');
+    }
+}
+
+/**
+ * Set multiple log levels at once
+ * @param {Object} levels - Object with level names as keys and boolean values
+ */
+function setLogLevels(levels) {
+    for (const [level, enabled] of Object.entries(levels)) {
+        if (LOG_LEVELS.hasOwnProperty(level)) {
+            Memory.logs[level] = enabled;
+        } else {
+            log('ERROR', `Invalid log level: ${level}`, 'System');
+        }
+    }
+    log('INFO', `Log levels updated: ${JSON.stringify(levels)}`, 'System');
+}
+
+/**
+ * Get current log level configuration
+ */
+function getLogLevels() {
+    return Memory.logs;
+}
+
 module.exports = {
     findClosestSource: (creep) => {
         return creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
@@ -8,17 +111,17 @@ module.exports = {
         const room = Game.rooms[targetRoomName];
 
         if (!room) {
-            console.log(`[findAvailableSource] Room ${targetRoomName} not found`);
+            log('WARN', `[findAvailableSource] Room ${targetRoomName} not found`, 'System');
             return null;
         }
 
         if (!room.controller || !room.controller.my) {
-            console.log(`[findAvailableSource] Room ${targetRoomName} not owned`);
+            log('WARN', `[findAvailableSource] Room ${targetRoomName} not owned`, 'System');
             return null;
         }
 
         if (!resourceType) {
-            console.log(`[findAvailableSource] resourceType not defined for creep ${creep.name}, defaulting to ENERGY`);
+            log('WARN', `[findAvailableSource] resourceType not defined for creep ${creep.name}, defaulting to ENERGY`, creep);
             resourceType = RESOURCE_ENERGY;
         }
 
@@ -41,7 +144,7 @@ module.exports = {
         }
 
         if (candidates.length === 0) {
-            console.log(`[findAvailableSource] No sources found for ${resourceType} in ${targetRoomName}`);
+            log('WARN', `[findAvailableSource] No sources found for ${resourceType} in ${targetRoomName}`, 'System');
             return null;
         }
 
@@ -93,157 +196,137 @@ module.exports = {
 
         for (let type of priorityTypes) {
             const targets = creep.room.find(FIND_STRUCTURES, {
-                filter: (structure) => 
-                    structure.structureType === type && 
+                filter: (structure) =>
+                    structure.structureType === type &&
                     structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
             });
             if (targets.length > 0) {
-                // Возвращаем ближайшую цель
                 return creep.pos.findClosestByPath(targets);
             }
         }
-        return null; // целей нет
-    },
-    
-        // Поиск приоритетных зданий для передачи ресурсов
-    findTowers: (creep) => {
-        if (!creep.room) return null; // защита от отсутствия комнаты
-    
-        const priorityTypes = [
-            STRUCTURE_TOWER,
-            STRUCTURE_SPAWN,
-            STRUCTURE_EXTENSION,
-            STRUCTURE_STORAGE,
-            STRUCTURE_CONTAINER,
-            STRUCTURE_LINK,
-            STRUCTURE_FACTORY,
-            STRUCTURE_LAB,
-            STRUCTURE_NUKER,
-            STRUCTURE_POWER_SPAWN,
-            STRUCTURE_OBSERVER,
-            STRUCTURE_TERMINAL,
-            STRUCTURE_PORTAL,
-        ];
-    
-        for (let type of priorityTypes) {
-            const targets = creep.room.find(FIND_STRUCTURES, {
-                filter: (structure) => 
-                    structure.structureType === type && 
-                    structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-            });
-            if (targets.length > 0) {
-                const target = creep.pos.findClosestByPath(targets);
-                if (target) {
-                    console.log(`Target for energy transfer: ${target.structureType} at ${target.pos}`);
-                    return target;
-                }
-                // Если target == null, можно попробовать следующий тип или вернуть null
-            }
+
+        // Если приоритетных структур нет, ищем ближайшее хранилище
+        const storage = creep.room.storage;
+        if (storage && storage.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+            return storage;
         }
+
+        // Если нет хранилища, ищем ближайший терминал
+        const terminal = creep.room.terminal;
+        if (terminal && terminal.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+            return terminal;
+        }
+
+        // Если нет приоритетных структур, ищем спавн или экстеншн с наименьшей энергией
+        const spawnsAndExtensions = creep.room.find(FIND_STRUCTURES, {
+            filter: (structure) =>
+                (structure.structureType === STRUCTURE_SPAWN ||
+                 structure.structureType === STRUCTURE_EXTENSION) &&
+                structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+        });
+
+        if (spawnsAndExtensions.length > 0) {
+            // Сортируем по заполненности (сначала менее заполненные)
+            spawnsAndExtensions.sort((a, b) =>
+                a.store.getFreeCapacity(RESOURCE_ENERGY) - b.store.getFreeCapacity(RESOURCE_ENERGY)
+            );
+            return creep.pos.findClosestByPath(spawnsAndExtensions);
+        }
+
+        // Если нет подходящих структур, возвращаем null
         return null;
     },
-    
-    findPriorityConstructionSite: (room) => {
-        // const priorities = [
-        //     FIND_STRUCTURES, // например, для ремонта (если есть)
-        //     FIND_CONSTRUCTION_SITES, // для новых построек
-        // ];
 
-        // Для определения типа целей по приоритетам
-        // Можно расширить список, например, искать расширения, дороги, стенки и т.д.
-        // Для этого лучше искать по конкретным типам объектов
+    findPriorityConstructionSite: (room) => {
         const priorityTypes = [
             STRUCTURE_SPAWN,
             STRUCTURE_EXTENSION,
             STRUCTURE_TOWER,
-            STRUCTURE_CONTAINER,
             STRUCTURE_STORAGE,
-            STRUCTURE_RAMPART,
-            STRUCTURE_WALL,
-            STRUCTURE_ROAD,
+            STRUCTURE_CONTAINER,
             STRUCTURE_LINK,
             STRUCTURE_FACTORY,
             STRUCTURE_LAB,
-            STRUCTURE_OBSERVER,
             STRUCTURE_NUKER,
             STRUCTURE_POWER_SPAWN,
-            STRUCTURE_EXTRACTOR,
+            STRUCTURE_OBSERVER,
             STRUCTURE_TERMINAL,
             STRUCTURE_PORTAL,
-            // добавьте нужные типы
         ];
 
         for (let type of priorityTypes) {
-            const target = room.find(FIND_CONSTRUCTION_SITES, {
+            const sites = room.find(FIND_CONSTRUCTION_SITES, {
                 filter: (site) => site.structureType === type
             });
-            if (target.length > 0) {
-                return target[0]; // возвращаем первый найденный по приоритету
+            if (sites.length > 0) {
+                return sites[0]; // Возвращаем первый сайт приоритетного типа
             }
         }
 
-        // Если ничего не найдено, возвращаем null
-        return null;
+        // Если приоритетных нет, возвращаем любой
+        const allSites = room.find(FIND_CONSTRUCTION_SITES);
+        return allSites.length > 0 ? allSites[0] : null;
     },
 
     findPriorityRepairTarget: (room) => {
-        // 1. Особые правила для дорог: ремонтируем в первую очередь при HP < 2000
-        const weakRoads = room.find(FIND_STRUCTURES, {
-            filter: (s) =>
-                s.structureType === STRUCTURE_ROAD &&
-                s.hits < 2000 &&
-                s.hits < s.hitsMax
-        });
-        
-        if (weakRoads.length > 0) {
-            // Выбираем самую повреждённую дорогу (минимальный процент оставшегося HP)
-            return _.min(weakRoads, (s) => s.hits / s.hitsMax);
+        // 1. Контроллер - приоритет 1
+        if (room.controller && room.controller.hits < room.controller.hitsMax * 0.8) {
+            return room.controller;
         }
 
-        // 2. Пороговые значения для других структур
-        const repairThresholds = {
-            [STRUCTURE_WALL]: 5000,
-            [STRUCTURE_RAMPART]: 10000,
-            [STRUCTURE_EXTENSION]: 20000,
-            [STRUCTURE_TOWER]: 15000,
-            // Можно добавить другие пороги по необходимости
-        };
+        // 2. Стены и рампы с низким HP - приоритет 2
+        const wallsAndRamparts = room.find(FIND_STRUCTURES, {
+            filter: (structure) =>
+                (structure.structureType === STRUCTURE_RAMPART ||
+                 structure.structureType === STRUCTURE_WALL) &&
+                structure.hits < structure.hitsMax * 0.1 // менее 10% прочности
+        });
 
-        // 3. Приоритетные типы структур (в порядке важности ремонта)
+        if (wallsAndRamparts.length > 0) {
+            // Возвращаем самую повреждённую
+            return _.min(wallsAndRamparts, (s) => s.hits);
+        }
+
+        // 3. Приоритетные структуры (без стен и рамп)
         const priorityTypes = [
+            STRUCTURE_SPAWN,
             STRUCTURE_EXTENSION,
             STRUCTURE_TOWER,
-            STRUCTURE_CONTAINER,
             STRUCTURE_STORAGE,
+            STRUCTURE_CONTAINER,
+            STRUCTURE_LINK,
             STRUCTURE_FACTORY,
             STRUCTURE_LAB,
-            STRUCTURE_LINK,
             STRUCTURE_NUKER,
             STRUCTURE_POWER_SPAWN,
             STRUCTURE_OBSERVER,
-            STRUCTURE_EXTRACTOR,
             STRUCTURE_TERMINAL,
-            STRUCTURE_PORTAL,
-            STRUCTURE_RAMPART,
-            STRUCTURE_WALL,
-            STRUCTURE_ROAD, // уже обработана выше, но оставляем для полноты
         ];
 
-        // 4. Поиск цели по приоритетам
-        for (const type of priorityTypes) {
-            const threshold = repairThresholds[type] || Infinity;
-            
-            const targets = room.find(FIND_STRUCTURES, {
-                filter: (s) =>
-                    s.structureType === type &&
-                    s.hits < s.hitsMax &&
-                    s.hits <= threshold
+        for (let type of priorityTypes) {
+            const structures = room.find(FIND_STRUCTURES, {
+                filter: (structure) =>
+                    structure.structureType === type &&
+                    structure.hits < structure.hitsMax * 0.8 // менее 80% прочности
             });
 
-            if (targets.length > 0) {
+            if (structures.length > 0) {
                 // Выбираем наиболее повреждённую структуру (минимальный остаток HP)
-                return _.min(targets, (s) => s.hits);
+                return _.min(structures, (s) => s.hits);
             }
+        }
+
+        // 4. Остальные структуры
+        const allStructures = room.find(FIND_STRUCTURES, {
+            filter: (structure) =>
+                structure.hits < structure.hitsMax * 0.5 && // менее 50% прочности
+                structure.structureType !== STRUCTURE_RAMPART &&
+                structure.structureType !== STRUCTURE_WALL
+        });
+
+        if (allStructures.length > 0) {
+            // Выбираем наиболее повреждённую структуру (минимальный остаток HP)
+            return _.min(allStructures, (s) => s.hits);
         }
 
         return null; // Нет целей для ремонта
@@ -251,8 +334,8 @@ module.exports = {
     
     findContainerWithEnergy: (creep, minEnergy = 150) => {
         const containers = creep.room.find(FIND_STRUCTURES, {
-            filter: (structure) => 
-                structure.structureType === STRUCTURE_CONTAINER && 
+            filter: (structure) =>
+                structure.structureType === STRUCTURE_CONTAINER &&
                 structure.store.getUsedCapacity(RESOURCE_ENERGY) >= minEnergy
             });
         if (containers.length > 0) {
@@ -351,7 +434,7 @@ module.exports = {
         // 1. Получаем все источники
         const sources = room.find(FIND_SOURCES);
         if (sources.length === 0) {
-            console.log(`${creep.name}: No sources in ${room.name}`);
+            log('WARN', `No sources in ${room.name}`, creep);
             return null;
         }
 
@@ -364,7 +447,7 @@ module.exports = {
                 source.pos.y + sourceRange,
                 source.pos.x + sourceRange,
                 true
-            ).filter(item => 
+            ).filter(item =>
                 item.structureType === STRUCTURE_CONTAINER &&
                 !item.structure.destroyed &&
                 item.pos.getRangeTo(source) <= sourceRange
@@ -388,7 +471,7 @@ module.exports = {
                     if (pos.x < 0 || pos.x > 49 || pos.y < 0 || pos.y > 49) continue;
 
                     // Логируем каждую проверяемую клетку
-                    console.log(`Проверка клетки (${pos.x},${pos.y}) относительно контейнера (${container.pos.x},${container.pos.y})`);
+                    log('DEBUG', `Проверка клетки (${pos.x},${pos.y}) относительно контейнера (${container.pos.x},${container.pos.y})`, creep);
 
                     const look = room.lookAt(pos);
                     let isBlocked = false;
@@ -397,7 +480,7 @@ module.exports = {
                     for (const item of look) {
                         // Логировать каждый элемент для диагностики
                         if (item.type) {
-                            console.log(`  Item type: ${item.type}${item.structure ? ', structureType=' + item.structure.structureType : ''}`);
+                            log('DEBUG', `  Item type: ${item.type}${item.structure ? ', structureType=' + item.structure.structureType : ''}`, creep);
                         }
 
                         // a) Стены и непроходимые terrain
@@ -437,7 +520,7 @@ module.exports = {
                     // Если клетка свободна и не занята
                     if (!isBlocked && !isOccupied) {
                         // Логируем подходящую позицию
-                        console.log(`Подходящая позиция: (${pos.x},${pos.y}), расстояние до источника: ${pos.getRangeTo(source)}`);
+                        log('DEBUG', `Подходящая позиция: (${pos.x},${pos.y}), расстояние до источника: ${pos.getRangeTo(source)}`, creep);
                         validPositions.push({
                             pos,
                             rangeToSource: pos.getRangeTo(source),
@@ -458,9 +541,9 @@ module.exports = {
 
         // 7. Логирование результата для отладки
         if (validPositions.length > 0) {
-            console.log(`Найдена позиция: ${validPositions[0].pos.x}, ${validPositions[0].pos.y}`);
+            log('INFO', `Найдена позиция: ${validPositions[0].pos.x}, ${validPositions[0].pos.y}`, creep);
         } else {
-            console.log(`${creep.name}: Не удалось найти подходящие позиции.`);
+            log('WARN', `Не удалось найти подходящие позиции.`, creep);
         }
 
         // Возвращаем лучшую позицию или null
@@ -578,7 +661,7 @@ module.exports = {
 
         // 2. Проверяем attackerPos
         if (!attackerPos || !attackerPos.isRoomPosition) {
-            console.log('Ошибка: attackerPos не является RoomPosition');
+            log('ERROR', 'Ошибка: attackerPos не является RoomPosition', 'System');
             return validEnemies; // возвращаем без сортировки по дистанции
         }
 
@@ -609,7 +692,7 @@ module.exports = {
             if (!hasHealA && hasHealB) return 1;
 
             // Приоритет 2: крипы с RANGED_ATTACK или ATTACK
-            const hasAttackA = a.body.some(part => 
+            const hasAttackA = a.body.some(part =>
                 part.type === RANGED_ATTACK || part.type === ATTACK) || false;
             const hasAttackB = b.body.some(part =>
                 part.type === RANGED_ATTACK || part.type === ATTACK) || false;
@@ -635,6 +718,12 @@ module.exports = {
             // Если все проверки не дали результата — считаем равными
             return 0;
         });
-    }
-
+    },
+    
+    // Export logging functions
+    log,
+    setLogLevel,
+    setLogLevels,
+    getLogLevels,
+    LOG_LEVELS
 };

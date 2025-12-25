@@ -1,6 +1,8 @@
 const _ = require('lodash');
 const baseRole = require('./role.base');
 const STORAGE_LIMIT = 30000;
+const utils = require('./utils');
+const { log } = utils;
 
 module.exports = {
     run: (creep) => {
@@ -31,7 +33,8 @@ module.exports = {
             creep.memory.state = 'delivering';
             creep.memory.targetId = null;
             creep.memory.sourceType = 'storage';
-            console.log(`${creep.name}: Принудительная доставка (осталось ${creep.ticksToLive} тиков}`);
+            creep.say(`☠️ in ${creep.ticksToLive}`);
+            log('INFO', `Принудительная доставка (осталось ${creep.ticksToLive} тиков}`, creep);
         }
 
         // 3. Переключение состояний (с улучшенной логикой)
@@ -49,7 +52,7 @@ module.exports = {
             const storage = room.storage;
 
             if (!storage) {
-                creep.say('🚫storage');
+                creep.say('🚫 storage');
                 return;
             }
 
@@ -92,14 +95,14 @@ module.exports = {
                     const result = creep.withdraw(bestContainer, RESOURCE_ENERGY);
                     if (result === OK) {
                         creep.say('✅ get E cont');
-                        console.log(`${creep.name} забрал энергию из контейнера ${bestContainer.id}`);
+                        log('INFO', `забрал энергию из контейнера ${bestContainer.id}`, creep);
                         creep.memory.targetId = null; // ➕ Сбрасываем после успешного забора
                     } else if (result === ERR_NOT_ENOUGH_RESOURCES) {
                         // Энергия уже закончилась — сбрасываем targetId
                         creep.memory.targetId = null;
                         creep.say('⛔ empty cont');
                     } else {
-                        console.log(`${creep.name} ошибка withdraw: ${result}`);
+                        log('WARN', `ошибка withdraw: ${result}`, creep);
                     }
                 } else {
                     creep.moveTo(bestContainer, {
@@ -117,9 +120,9 @@ module.exports = {
                     const result = creep.withdraw(storage, RESOURCE_ENERGY);
                     if (result === OK) {
                         creep.say('✅ get E');
-                        console.log(`${creep.name} забрал энергию из storage`);
+                        log('INFO', `забрал энергию из storage`, creep);
                     } else {
-                        console.log(`${creep.name} ошибка withdraw: ${result}`);
+                        log('WARN', `ошибка withdraw: ${result}`, creep);
                     }
                 } else {
                     creep.moveTo(storage, {
@@ -169,11 +172,11 @@ module.exports = {
                 const result = creep.transfer(target, RESOURCE_ENERGY);
                 if (result === OK) {
                     creep.say(`🚚 to ${target.structureType}`);
-                    console.log(`${creep.name} передал энергию в ${target.structureType} (${target.id})`);
+                    log('INFO', `передал энергию в ${target.structureType} (${target.id})`, creep);
                     // После успешной передачи сбрасываем targetId, чтобы найти новую цель
                     creep.memory.targetId = null;
                 } else {
-                    console.log(`${creep.name} ошибка transfer: ${result}`);
+                    log('WARN', `ошибка transfer: ${result}`, creep);
                 }
             } else {
                 creep.moveTo(target, {

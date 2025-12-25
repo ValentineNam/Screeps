@@ -3,6 +3,7 @@ const nameGenerator = require('./service.nameGenerator');
 const missionManager = require('./controller.missionManager');
 const state = require('./state');
 const utils = require('./utils');
+const { log } = utils;
 
 const getSpawnRules = require('./config.spawnRules');
 
@@ -230,18 +231,18 @@ function hasSufficientBaseCreeps(roomName) {
 function selectTargetRoom(homeRoom, role) {
     const config = getRoomConfig(homeRoom);
     if (!config) {
-        console.log(`[spawnManager] Нет конфигурации для комнаты ${homeRoom}`);
+        log('ERROR', `Нет конфигурации для комнаты ${homeRoom}`, 'spawnManager');
         return null;
     }
 
     if (!config.remoteCreeps || !config.remoteCreeps[role]) {
-        console.log(`[spawnManager] Нет remoteCreeps.${role} для комнаты ${homeRoom}`);
+        log('ERROR', `Нет remoteCreeps.${role} для комнаты ${homeRoom}`, 'spawnManager');
         return null;
     }
 
     const { rooms } = config.remoteCreeps[role];
     if (!rooms || rooms.length === 0) {
-        console.log(`[spawnManager] Пустой список rooms для ${role} в ${homeRoom}`);
+        log('ERROR', `Пустой список rooms для ${role} в ${homeRoom}`, 'spawnManager');
         return null;
     }
 
@@ -415,7 +416,7 @@ function attemptSpawn(spawn, body, name, mem, ctx, role, reason) {
             bodyCost: cost
         };
         recordSpawnDecision(roomName, entry);
-        console.log(`[spawnManager:${roomName}] Spawned ${entry.role} (${reason || 'spawn'}) ${name} -> ${entry.targetRoom} cost=${cost}`);
+        log('INFO', `[spawnManager:${roomName}] Spawned ${entry.role} (${reason || 'spawn'}) ${name} -> ${entry.targetRoom} cost=${cost}`, 'system');
         // keep the pending entry as a representation of an in-progress spawn (will be pruned later)
         return true;
     } else {
@@ -427,7 +428,8 @@ function attemptSpawn(spawn, body, name, mem, ctx, role, reason) {
                 if (idx >= 0) arr.splice(idx, 1);
             }
         } catch (e) {}
-        console.log(`Failed to spawn ${role || (mem && mem.role) || name}: ${res}`);
+        log('ERROR', `Failed to spawn ${role || (mem && mem.role) || name}: ${res}`, 'system');
+        
         return false;
     }
 }
@@ -686,18 +688,18 @@ function tryRemoteReplacementPhase(spawn, ctx) {
 function selectTargetRoom(homeRoom, role) {
     const config = getRoomConfig(homeRoom);
     if (!config) {
-        console.log(`[spawnManager] Нет конфигурации для комнаты ${homeRoom}`);
+        log('ERROR', `Нет конфигурации для комнаты ${homeRoom}`, 'spawnManager');
         return null;
     }
 
     if (!config.remoteCreeps || !config.remoteCreeps[role]) {
-        console.log(`[spawnManager] Нет remoteCreeps.${role} для комнаты ${homeRoom}`);
+        log('ERROR', `Нет remoteCreeps.${role} для комнаты ${homeRoom}`, 'spawnManager');
         return null;
     }
 
     const { rooms } = config.remoteCreeps[role];
     if (!rooms || rooms.length === 0) {
-        console.log(`[spawnManager] Пустой список rooms для ${role} в ${homeRoom}`);
+        log('ERROR', `Пустой список rooms для ${role} в ${homeRoom}`, 'spawnManager');
         return null;
     }
 
@@ -708,7 +710,7 @@ function selectTargetRoom(homeRoom, role) {
     if (role === 'crawler') {
         candidateRooms = candidateRooms.filter(r => hasContainerInRoom(r));
         if (candidateRooms.length === 0) {
-            console.log(`[spawnManager] Нет комнат с контейнером для crawler`);
+            log('INFO', `Нет комнат с контейнером для crawler`, 'spawnManager');
             return null;
         }
     }
@@ -761,7 +763,7 @@ function tryLocalPhase(spawn, ctx, allowSmall) {
         const currentMiners = countCreepsByRole('miner', roomName, roomName);
         const currentUpgraders = countCreepsByRole('upgrader', roomName);
         const hasContainers = hasContainerInRoom(roomName);
-        console.log(`[spawnManager:${roomName}] localCounts harv=${currentHarvesters} miner=${currentMiners} upg=${currentUpgraders} localTotal=${ctx.localCreepsCount} containers=${hasContainers} energy=${ctx.energy}/${ctx.energyCapacity} allowSmall=${allowSmall}`);
+        log('WARN', `: ${roomName} localCounts harv=${currentHarvesters} miner=${currentMiners} upg=${currentUpgraders} localTotal=${ctx.localCreepsCount} containers=${hasContainers} energy=${ctx.energy}/${ctx.energyCapacity} allowSmall=${allowSmall}`, 'spawnManager');
 
         // a) Если харвестеров меньше 2 — спавним харвестера
         if (currentHarvesters < 2) {
@@ -868,7 +870,7 @@ function tryRemotePhase(spawn, ctx, allowSmall) {
                 const allowSmallForRemote = false;
                 let body = pickBody('logist', ctx.energy, ctx.energyCapacity, allowSmallForRemote, ctx);
                 if (!body) {
-                    console.log(`Skip crawler -> no body fits in ${roomName} (energy ${ctx.energy}/${ctx.energyCapacity})`);
+                    log('INFO', `Skip crawler -> no body fits in ${roomName} (energy ${ctx.energy}/${ctx.energyCapacity})`, 'spawnManager');
                     continue;
                 }
                 const mem = memoryFactories.crawler ? memoryFactories.crawler(ctx) : baseMemory('crawler', ctx);

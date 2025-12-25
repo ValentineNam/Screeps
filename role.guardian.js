@@ -1,6 +1,8 @@
 const _ = require('lodash');
-const sourcesModule = require('./utils');
 const constants = require('./config.constants');
+const utils = require('./utils');
+const sourcesModule = utils;
+const { log } = utils;
 
 const lowHpLvl = 0.35; // 35%
 
@@ -26,7 +28,7 @@ module.exports = {
                 maxRooms: 10,
                 reusePath: 5
             }) !== OK) {
-                console.log(`${creep.name}: Не могу перейти в ${creep.memory.targetRoom}`);
+                log('WARN', `Не могу перейти в ${creep.memory.targetRoom}`, creep);
             }
             return;
         }

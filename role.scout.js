@@ -25,9 +25,9 @@ module.exports = {
             });
 
             if (result === OK) {
-                console.log(`${creep.name} moving to border of ${targetRoomName}`);
+                log('INFO', `moving to border of ${targetRoomName}`, creep);
             } else if (result === ERR_NO_PATH || result === ERR_NOT_FOUND) {
-                console.log(`${creep.name} cannot reach ${targetRoomName}. Switching to next room.`);
+                log('WARN', `cannot reach ${targetRoomName}. Switching to next room.`, creep);
                 creep.memory.scanIndex++;
             }
             return;
@@ -35,7 +35,7 @@ module.exports = {
 
         // 3. Проверка контроллера
         if (!targetRoom.controller) {
-            console.log(`${creep.name} cannot sign ${targetRoomName}: no controller`);
+            log('WARN', `cannot sign ${targetRoomName}: no controller`, creep);
             creep.memory.state = 'moving';
             creep.memory.scanIndex++;
             return;
@@ -43,7 +43,7 @@ module.exports = {
 
         // 4. Проверка прав доступа
         if (targetRoom.controller.my === false && targetRoom.controller.owner) {
-            console.log(`${creep.name} cannot sign ${targetRoomName}: controlled by ${targetRoom.controller.owner.username}`);
+            log('WARN', `cannot sign ${targetRoomName}: controlled by ${targetRoom.controller.owner.username}`, creep);
             creep.memory.state = 'moving';
             creep.memory.scanIndex++;
             return;
@@ -52,12 +52,12 @@ module.exports = {
         // 5. Логика состояний
         if (state === 'moving') {
             creep.memory.state = 'signing';
-            console.log(`${creep.name} attempting to mark ${targetRoomName}`);
+            log('INFO', `attempting to mark ${targetRoomName}`, creep);
         }
         else if (state === 'signing') {
             // 5.1. Проверяем, что крип в нужной комнате
             if (creep.room.name !== targetRoomName) {
-                console.log(`${creep.name} not in ${targetRoomName} (currently in ${creep.room.name}). Moving inside.`);
+                log('WARN', `not in ${targetRoomName} (currently in ${creep.room.name}). Moving inside.`, creep);
                 
                 const entryPos = new RoomPosition(25, 25, targetRoomName);
                 const moveResult = creep.moveTo(entryPos, {
@@ -67,13 +67,13 @@ module.exports = {
                 });
 
                 if (moveResult === OK) {
-                    console.log(`${creep.name} started moving to ${targetRoomName}`);
+                    log('INFO', `started moving to ${targetRoomName}`, creep);
                 } else if (moveResult === ERR_NO_PATH) {
-                    console.log(`${creep.name} cannot find path to ${targetRoomName}. Will retry.`);
+                    log('WARN', `cannot find path to ${targetRoomName}. Will retry.`, creep);
                 } else if (moveResult === ERR_NOT_FOUND) {
-                    console.log(`${creep.name} target position not found in ${targetRoomName}`);
+                    log('WARN', `target position not found in ${targetRoomName}`, creep);
                 } else {
-                    console.log(`${creep.name} moveTo failed with code ${moveResult}`);
+                    log('ERROR', `moveTo failed with code ${moveResult}`, creep);
                 }
                 return;
             }
@@ -83,7 +83,7 @@ module.exports = {
             const distance = creep.pos.getRangeTo(controller);
 
             if (distance > 0) {
-                console.log(`${creep.name} is ${distance} tiles away from controller in ${targetRoomName}. Moving closer.`);
+                log('INFO', `is ${distance} tiles away from controller in ${targetRoomName}. Moving closer.`, creep);
                 const moveResult = creep.moveTo(controller, {
                     visualizePathStyle: { stroke: '#ff00ff' },
                     range: 0,
@@ -92,7 +92,7 @@ module.exports = {
                 });
 
                 if (moveResult !== OK) {
-                    console.log(`${creep.name} cannot move closer to controller: ${moveResult}`);
+                    log('WARN', `cannot move closer to controller: ${moveResult}`, creep);
                 }
                 return;
             }
@@ -104,7 +104,7 @@ module.exports = {
             }
 
             if (result === OK) {
-                console.log(`${creep.name} marked ${targetRoomName} with signature: "${SIGN_TEXT}"`);
+                log('INFO', `marked ${targetRoomName} with signature: "${SIGN_TEXT}"`, creep);
                 creep.memory.state = 'moving';
                 creep.memory.scanIndex++;
             }
@@ -114,22 +114,22 @@ module.exports = {
                     signOwner = targetRoom.sign.username;
                 }
                 if (signOwner === Game.cpu.shard) {
-                    console.log(`${creep.name} updating own signature in ${targetRoomName}`);
+                    log('INFO', `updating own signature in ${targetRoomName}`, creep);
                 } else {
-                    console.log(`${creep.name} skipping ${targetRoomName} (signed by ${signOwner})`);
+                    log('WARN', `skipping ${targetRoomName} (signed by ${signOwner})`, creep);
                 }
                 creep.memory.state = 'moving';
                 creep.memory.scanIndex++;
             }
             else {
-                console.log(`${creep.name} failed to sign ${targetRoomName}: ${result}. Distance: ${distance}. Controller pos: ${controller.pos}`);
+                log('WARN', `failed to sign ${targetRoomName}: ${result}. Distance: ${distance}. Controller pos: ${controller.pos}`, creep);
             }
         }
 
         // 6. Цикл обхода
         if (creep.memory.scanIndex >= SCAN_ROOMS.length) {
             creep.memory.scanIndex = 0;
-            console.log(`${creep.name} completed full scan cycle. Restarting.`);
+            log('INFO', `completed full scan cycle. Restarting.`, creep);
         }
     }
 };

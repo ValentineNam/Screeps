@@ -1,6 +1,8 @@
 const constants = require('./config.constants');
 const nameGenerator = require('./service.nameGenerator');
 const getSpawnRules = require('./config.spawnRules');
+const utils = require('./utils');
+const { log } = utils;
 const BODYPART_COST = constants.BODYPART_COST;
 const spawnManagerCore = require('./spawnManager.core');
 const creepCounting = require('./spawnManager.creepCounting');
@@ -61,7 +63,7 @@ function attemptSpawn(spawn, body, name, mem, ctx, role, reason) {
             bodyCost: cost
         };
         recordSpawnDecision(roomName, entry);
-        console.log(`[spawnManager:${roomName}] Spawned ${entry.role} (${reason || 'spawn'}) ${name} -> ${entry.targetRoom} cost=${cost}`);
+        log('INFO', `[spawnManager:${roomName}] Spawned ${entry.role} (${reason || 'spawn'}) ${name} -> ${entry.targetRoom} cost=${cost}`, spawn);
         // keep the pending entry as a representation of an in-progress spawn (will be pruned later)
         return true;
     } else {
@@ -73,7 +75,7 @@ function attemptSpawn(spawn, body, name, mem, ctx, role, reason) {
                 if (idx >= 0) arr.splice(idx, 1);
             }
         } catch (e) {}
-        console.log(`Failed to spawn ${role || (mem && mem.role) || name}: ${res}`);
+        log('ERROR', `Failed to spawn ${role || (mem && mem.role) || name}: ${res}`, spawn);
         return false;
     }
 }
@@ -354,18 +356,18 @@ function tryRemoteReplacementPhase(spawn, ctx) {
 function selectTargetRoom(homeRoom, role) {
     const config = creepCounting.getRoomConfig(homeRoom);
     if (!config) {
-        console.log(`[spawnManager] Нет конфигурации для комнаты ${homeRoom}`);
+        log('WARN', `[spawnManager] Нет конфигурации для комнаты ${homeRoom}`, homeRoom);
         return null;
     }
 
     if (!config.remoteCreeps || !config.remoteCreeps[role]) {
-        console.log(`[spawnManager] Нет remoteCreeps.${role} для комнаты ${homeRoom}`);
+        log('WARN', `[spawnManager] Нет remoteCreeps.${role} для комнаты ${homeRoom}`, homeRoom);
         return null;
     }
 
     const { rooms } = config.remoteCreeps[role];
     if (!rooms || rooms.length === 0) {
-        console.log(`[spawnManager] Пустой список rooms для ${role} в ${homeRoom}`);
+        log('WARN', `[spawnManager] Пустой список rooms для ${role} в ${homeRoom}`, homeRoom);
         return null;
     }
 
@@ -376,7 +378,7 @@ function selectTargetRoom(homeRoom, role) {
     if (role === 'crawler') {
         candidateRooms = candidateRooms.filter(r => roomData.hasContainerInRoom(r));
         if (candidateRooms.length === 0) {
-            console.log(`[spawnManager] Нет комнат с контейнером для crawler`);
+            log('INFO', `[spawnManager] Нет комнат с контейнером для crawler`, homeRoom);
             return null;
         }
     }
@@ -426,7 +428,7 @@ function tryLocalPhase(spawn, ctx, allowSmall) {
         const currentMiners = creepCounting.countCreepsByRole('miner', roomName, roomName);
         const currentUpgraders = creepCounting.countCreepsByRole('upgrader', roomName);
         const hasContainers = roomData.hasContainerInRoom(roomName);
-        console.log(`[spawnManager:${roomName}] localCounts harv=${currentHarvesters} miner=${currentMiners} upg=${currentUpgraders} localTotal=${ctx.localCreepsCount} containers=${hasContainers} energy=${ctx.energy}/${ctx.energyCapacity} allowSmall=${allowSmall}`);
+        log('DEBUG', `[spawnManager:${roomName}] localCounts harv=${currentHarvesters} miner=${currentMiners} upg=${currentUpgraders} localTotal=${ctx.localCreepsCount} containers=${hasContainers} energy=${ctx.energy}/${ctx.energyCapacity} allowSmall=${allowSmall}`, roomName);
 
         // Проверяем, есть ли контейнеры возле источников
         const sourceContainers = Game.rooms[roomName] ? roomData.getSourceContainers(roomName) : [];
@@ -617,7 +619,7 @@ function tryRemotePhase(spawn, ctx, allowSmall) {
                 const allowSmallForRemote = false;
                 let body = spawnManagerCore.pickBody('logist', ctx.energy, ctx.energyCapacity, allowSmallForRemote, ctx);
                 if (!body) {
-                    console.log(`Skip crawler -> no body fits in ${roomName} (energy ${ctx.energy}/${ctx.energyCapacity})`);
+                    log('DEBUG', `Skip crawler -> no body fits in ${roomName} (energy ${ctx.energy}/${ctx.energyCapacity})`, roomName);
                     continue;
                 }
                 const mem = spawnManagerCore.memoryFactories.crawler ? spawnManagerCore.memoryFactories.crawler(ctx) : spawnManagerCore.baseMemory('crawler', ctx);

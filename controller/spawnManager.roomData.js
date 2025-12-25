@@ -97,7 +97,7 @@ function getSourceContainers(roomName) {
                     }
                 } catch (e) {
                     // Если комната недоступна, findInRange выбросит ошибку - просто возвращаем пустой массив
-                    console.log(`[getSourceContainers] Error accessing room ${roomName}: ${e.message}`);
+                    log('ERROR', `[getSourceContainers] Error accessing room ${roomName}: ${e.message}`, 'system');
                     return [];
                 }
             } else {

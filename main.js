@@ -1,3 +1,7 @@
+const utils = require('./utils');
+const { log } = utils;
+
+// Import all roles
 const roles = {
     builder: require('./role.builder'),
     remoteBuilder: require('./role.builder'),
@@ -18,7 +22,7 @@ const roles = {
     // squad_tank: require('./role.squadTank'),
     // squad_damager: require('./role.squadDamager'),
     // squad_ranger: require('./role.squadRanger'),
-    // squad_healer: require('./role.squadHealer'), 
+    // squad_healer: require('./role.squadHealer'),
 };
 
 const constants = require('./config.constants');
@@ -42,6 +46,14 @@ module.exports.loop = () => {
     // приводим его к объекту, чтобы использовать как map roomName -> data
     if (!Memory.rooms || Array.isArray(Memory.rooms)) Memory.rooms = {};
     if (!Memory.baseStates) Memory.baseStates = {};
+
+    // Выводим список комнат, помеченных как homeRoom, при каждом 100-м тике для отладки
+    if (Game.time % 100 === 0) {
+        const claimerModule = require('./role.claimer');
+        const homeRooms = claimerModule.getHomeRooms ? claimerModule.getHomeRooms() : [];
+        log('INFO', `Комнаты, помеченные как homeRoom: ${homeRooms.join(', ')}`, 'System');
+        log('INFO', `Текущий GCL уровень: ${Game.gcl.level}, количество комнат: ${Object.keys(Game.rooms).filter(name => Game.rooms[name].controller && Game.rooms[name].controller.my).length}`, 'System');
+    }
 
     // 2. Обновляем данные по комнатам (раз в ~N тиков) — распределяем обновления по тикам,
     // чтобы не обновлять все комнаты одновременно и не создавать пиковой нагрузки на CPU.
@@ -136,9 +148,25 @@ module.exports.loop = () => {
     for (const name in Memory.creeps) {
         if (!Game.creeps[name]) {
             delete Memory.creeps[name];
-            console.log(`Deleted memory of dead creep: ${name}`);
+            log('INFO', `Deleted memory of dead creep: ${name}`, 'System');
         }
     }
+};
+
+// Добавляем функции логирования в глобальный объект для доступа из консоли
+global.setLogLevel = (level, enabled = true) => {
+    const utils = require('./utils');
+    return utils.setLogLevel(level, enabled);
+};
+
+global.setLogLevels = (levels) => {
+    const utils = require('./utils');
+    return utils.setLogLevels(levels);
+};
+
+global.getLogLevels = () => {
+    const utils = require('./utils');
+    return utils.getLogLevels();
 };
 
 // memory

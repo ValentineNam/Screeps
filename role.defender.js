@@ -1,5 +1,7 @@
-const sourcesModule = require('./utils');
 const constants = require('./config.constants');
+const utils = require('./utils');
+const sourcesModule = utils;
+const { log } = utils;
 
 module.exports = {
     run: (creep) => {
@@ -26,7 +28,7 @@ module.exports = {
                 maxRooms: 10,
                 reusePath: 5
             }) !== OK) {
-                console.log(`${creep.name}: Не могу двигаться в ${creep.memory.targetRoom}`);
+                log('WARN', `Не могу двигаться в ${creep.memory.targetRoom}`, creep);
             }
             return;
         }
@@ -70,7 +72,7 @@ module.exports = {
             if (creep.memory.state !== 'attack') {
                 creep.memory.state = 'attack';
                 creep.say('⚔ ATK');
-                console.log(`${creep.name} switches to attack mode`);
+                log('INFO', `switches to attack mode`, creep);
             }
             creep.memory.attackCooldown = 5;
         } else {
@@ -79,7 +81,7 @@ module.exports = {
             } else if (creep.memory.state !== 'patrol') {
                 creep.memory.state = 'patrol';
                 creep.say('🛡️ PAT');
-                console.log(`${creep.name} switches to patrol mode`);
+                log('INFO', `switches to patrol mode`, creep);
             }
         }
 
@@ -112,7 +114,7 @@ module.exports = {
         if (creep.memory.state === 'patrol') {
             const controller = creep.room.controller;
             if (!controller) {
-                console.log(`${creep.name}: Нет контроллера в комнате. Переход в ожидание.`);
+                log('WARN', `Нет контроллера в комнате. Переход в ожидание.`, creep);
                 return;
             }
 
@@ -193,14 +195,14 @@ module.exports = {
                         x: Math.max(1, Math.min(48, controller.pos.x + 7)),
                         y: Math.max(1, Math.min(48, controller.pos.y))
                     };
-                    console.log(`${creep.name}: Использована запасная патрульная точка: (${creep.memory.patrolTarget.x}, ${creep.memory.patrolTarget.y})`);
+                    log('INFO', `Использована запасная патрульная точка: (${creep.memory.patrolTarget.x}, ${creep.memory.patrolTarget.y})`, creep);
                 }
             }
 
             // ФИНАЛЬНАЯ ПРОВЕРКА: убеждаемся, что точка валидна
             const target = creep.memory.patrolTarget;
             if (!target || typeof target.x !== 'number' || typeof target.y !== 'number') {
-                console.error(`${creep.name}: Критическая ошибка: patrolTarget невалиден:`, target);
+                log('ERROR', `Критическая ошибка: patrolTarget невалиден:`, creep);
                 creep.memory.patrolTarget = null; // Сброс для перегенерации
                 return;
             }

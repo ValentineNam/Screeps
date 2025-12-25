@@ -77,18 +77,18 @@ function hasSufficientBaseCreeps(roomName) {
 function selectTargetRoom(homeRoom, role) {
     const config = getRoomConfig(homeRoom);
     if (!config) {
-        console.log(`[spawnManager] Нет конфигурации для комнаты ${homeRoom}`);
+        log('WARN', `[spawnManager] Нет конфигурации для комнаты ${homeRoom}`, homeRoom);
         return null;
     }
 
     if (!config.remoteCreeps || !config.remoteCreeps[role]) {
-        console.log(`[spawnManager] Нет remoteCreeps.${role} для комнаты ${homeRoom}`);
+        log('WARN', `[spawnManager] Нет remoteCreeps.${role} для комнаты ${homeRoom}`, homeRoom);
         return null;
     }
 
     const { rooms } = config.remoteCreeps[role];
     if (!rooms || rooms.length === 0) {
-        console.log(`[spawnManager] Пустой список rooms для ${role} в ${homeRoom}`);
+        log('WARN', `[spawnManager] Пустой список rooms для ${role} в ${homeRoom}`, homeRoom);
         return null;
     }
 

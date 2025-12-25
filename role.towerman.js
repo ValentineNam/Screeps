@@ -158,9 +158,9 @@ module.exports = {
                 if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
                     creep.memory.state = 'delivering';
                     creep.memory.waitStartTick = null;
-                    console.log(`${creep.name}: Timeout in harvesting. Switching to delivering with ${creep.store[RESOURCE_ENERGY]} energy`);
+                    log('INFO', `Timeout in harvesting. Switching to delivering with ${creep.store[RESOURCE_ENERGY]} energy`, creep);
                 } else {
-                    console.log(`${creep.name}: Still waiting for resource (${waitDuration} ticks)`);
+                    log('INFO', `Still waiting for resource (${waitDuration} ticks)`, creep);
                 }
             }
         } else if (creep.memory.state === 'delivering') {
@@ -201,9 +201,9 @@ module.exports = {
             if (creep.pos.isNearTo(targetTower)) {
                 const transferResult = creep.transfer(targetTower, RESOURCE_ENERGY);
                 if (transferResult === OK) {
-                    console.log(`${creep.name}: Энергия доставлена в башню ${targetTower.id}`);
+                    log('INFO', `энергия доставлена в башню ${targetTower.id}`, creep);                    
                 } else {
-                    console.log(`${creep.name}: Ошибка передачи в башню: ${transferResult}`);
+                    log('WARN', `Ошибка передачи в башню: ${transferResult}`, creep);   
                 }
             } else {
                 creep.moveTo(targetTower, { visualizePathStyle: { stroke: '#00ff00' } }); // Зелёный путь к башне

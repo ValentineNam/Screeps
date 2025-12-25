@@ -1,5 +1,8 @@
 const _ = require('lodash');
 const constants = require('./config.constants');
+const utils = require('./utils');
+const sourcesModule = utils;
+const { log } = utils;
 
 module.exports = {
     run: (creep) => {
@@ -20,7 +23,7 @@ module.exports = {
                 maxRooms: 10,
                 reusePath: 5
             }) !== OK) {
-                console.log(`${creep.name}: Не могу перейти в ${creep.memory.targetRoom}`);
+                log('WARN', `Не могу перейти в ${creep.memory.targetRoom}`, creep);
             }
             return;
         }
@@ -106,7 +109,7 @@ module.exports = {
             // Лечим себя, если мы ранены
             creep.heal(creep);
             creep.rangedHeal(creep);
-            creep.say('❤️ SELF HEAL');
+            creep.say('❤️ SELF');
             return;
         }
 
@@ -154,7 +157,7 @@ module.exports = {
             // Лечение
             else if (distance <= 3) {
                 creep.heal(target);
-                creep.say(`💚 HEAL ${target.memory.role || 'creep'}`);
+                creep.say(`💚 ${target.memory.role || 'creep'}`);
 
 
                 // Отступ от врагов

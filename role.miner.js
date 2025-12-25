@@ -1,6 +1,7 @@
-const sourcesModule = require('./utils');
+const utils = require('./utils');
 const baseRole = require('./role.base');
 const constants = require('./config.constants');
+const { log } = utils;
 
 module.exports = {
     run: (creep) => {
@@ -25,7 +26,7 @@ module.exports = {
         // 2. Проверка доступности целевой комнаты
         const roomStatus = Game.map.getRoomStatus(targetRoom);
         if (roomStatus.status !== 'normal') {
-            console.log(`${creep.name}: Комната ${targetRoom} недоступна. Статус: ${roomStatus.status}`);
+            log('INFO', `Комната ${targetRoom} недоступна. Статус: ${roomStatus.status}`, creep);
             creep.memory.state = 'waiting';
             return;
         }
@@ -61,7 +62,7 @@ module.exports = {
                     visualizePathStyle: { stroke: '#00ffff' }
                 });
                 if (moveResult !== OK) {
-                    console.log(`${creep.name}: Ошибка движения к ${targetRoom}: ${moveResult}`);
+                    log('WARN', `Ошибка движения к ${targetRoom}: ${moveResult}`, creep);
                 }
                 return;
             } else {
@@ -79,7 +80,7 @@ module.exports = {
             });
 
             if (containers.length === 0) {
-                console.log(`${creep.name}: Нет доступных контейнеров.`);
+                log('WARN', `Нет доступных контейнеров.`, creep);
                 creep.memory.state = 'waiting';
                 return;
             }
@@ -94,7 +95,7 @@ module.exports = {
 
 
             if (freeContainers.length === 0) {
-                console.log(`${creep.name}: Все контейнеры заняты.`);
+                log('WARN', `Все контейнеры заняты.`, creep);
                 creep.memory.state = 'waiting';
                 return;
             }
@@ -109,7 +110,7 @@ module.exports = {
                     visualizePathStyle: { stroke: '#ffaa00' }
                 });
                 if (moveResult !== OK) {
-                    console.log(`${creep.name}: Не могу подойти к контейнеру. Код: ${moveResult}`);
+                    log('WARN', `Не могу подойти к контейнеру. Код: ${moveResult}`, creep);
                 }
                 creep.memory.atContainer = false;
                 return;
@@ -148,7 +149,7 @@ module.exports = {
             }
 
             if (!source) {
-                console.log(`${creep.name}: Нет доступного источника рядом с контейнером.`);
+                log('WARN', `Нет доступного источника рядом с контейнером.`, creep);
                 creep.memory.state = 'waiting';
                 creep.memory.atContainer = false;
                 return;
@@ -158,15 +159,15 @@ module.exports = {
             // 6.4. Добываем
             const harvestResult = creep.harvest(source);
             if (harvestResult === OK) {
-                console.log(`${creep.name} добыл ${creep.memory.resourceType} в контейнер.`);
+                log('INFO', `добыл ${creep.memory.resourceType} в контейнер.`, creep);
             } else if (harvestResult === ERR_NOT_ENOUGH_ENERGY) {
                 // Cоoldown — ждём
                 return;
             } else if (harvestResult === ERR_NOT_IN_RANGE) {
-                console.log(`${creep.name}: Источник вне досягаемости. Перепозиционируемся.`);
+                log('INFO', `Источник вне досягаемости. Перепозиционируемся.`, creep);
                 creep.memory.atContainer = false;
             } else {
-                console.log(`${creep.name}: Ошибка добычи: ${harvestResult}`);
+                log('WARN', `Ошибка добычи: ${harvestResult}`, creep);
                 creep.memory.state = 'waiting';
                 creep.memory.atContainer = false;
             }

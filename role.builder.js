@@ -1,5 +1,7 @@
-const sourcesModule = require('./utils');
 const baseRole = require('./role.base');
+const utils = require('./utils');
+const sourcesModule = utils;
+const { log } = utils;
 
 module.exports = {
     run: (creep) => {
@@ -50,7 +52,7 @@ module.exports = {
         if (creep.store[RESOURCE_ENERGY] === 0) {
             state = 'harvesting';
             creep.memory.enteredTargetRoom = false;
-            console.log(`${creep.name} switch to harvesting (empty)`);
+            log('DEBUG', `switch to harvesting (empty)`, creep);
         }
         // Если инвентарь полон — решаем, что делать дальше
         else if (creep.store.getFreeCapacity() === 0) {
@@ -60,14 +62,14 @@ module.exports = {
 
             if (hasConstruction) {
                 state = 'building';
-                console.log(`${creep.name} switch to building`);
+                log('DEBUG', `switch to building`, creep);
             } else if (repairTarget) {
                 state = 'repair';
-                console.log(`${creep.name} switch to repair`);
+                log('DEBUG', `switch to repair`, creep);
             } else {
                 // Нет задач — ждём
                 state = 'waiting';
-                console.log(`${creep.name} no tasks, switch to waiting`);
+                log('INFO', `no tasks, switch to waiting`, creep);
             }
         }
 
@@ -119,7 +121,7 @@ module.exports = {
             if (!creep.memory.sourceId || !Game.getObjectById(creep.memory.sourceId)) {
                 const source = baseRole.findAvailableSourceFromMemory(creep);
                 if (!source) {
-                    console.log(`${creep.name} no source found, waiting`);
+                    log('WARN', `no source found, waiting`, creep);
                     state = 'waiting';
                     creep.memory.state = state;
                     return;
@@ -141,9 +143,9 @@ module.exports = {
                     reusePath: 5
                 });
             } else if (result === OK) {
-                console.log(`${creep.name} harvesting from source`);
+                log('DEBUG', `harvesting from source`, creep);
             } else {
-                console.log(`${creep.name} harvest error: ${result}`);
+                log('WARN', `harvest error: ${result}`, creep);
             }
             return;
         }
@@ -152,7 +154,7 @@ module.exports = {
         if (state === 'building') {
             const constructionSite = sourcesModule.findPriorityConstructionSite(creep.room);
             if (!constructionSite) {
-                console.log(`${creep.name} no construction site, switching to repair`);
+                log('INFO', `no construction site, switching to repair`, creep);
                 state = 'repair';
                 creep.memory.state = state;
                 return;
@@ -165,15 +167,15 @@ module.exports = {
                     reusePath: 5
                 });
             } else if (result === OK) {
-                console.log(`${creep.name} building`);
+                log('DEBUG', `building`, creep);
             } else if (result === ERR_NOT_ENOUGH_RESOURCES) {
                 // Нет ресурсов — переключаемся на сбор
                 state = 'harvesting';
                 creep.memory.enteredTargetRoom = false;
                 creep.memory.state = state;
-                console.log(`${creep.name} out of energy, switch to harvesting`);
+                log('DEBUG', `out of energy, switch to harvesting`, creep);
             } else {
-                console.log(`${creep.name} build error: ${result}`);
+                log('WARN', `build error: ${result}`, creep);
             }
             return;
         }
@@ -189,7 +191,7 @@ module.exports = {
             });
 
             if (structures.length === 0) {
-                console.log(`${creep.name} nothing to repair, switching to harvesting`);
+                log('INFO', `nothing to repair, switching to harvesting`, creep);
                 state = 'harvesting';
                 creep.memory.enteredTargetRoom = false;
                 creep.memory.state = state;
@@ -205,13 +207,13 @@ module.exports = {
                     reusePath: 5
                 });
             } else if (result === OK) {
-                console.log(`${creep.name} repairing`);
+                log('DEBUG', `repairing`, creep);
             } else if (result === ERR_NOT_ENOUGH_RESOURCES) {
                 state = 'harvesting';
                 creep.memory.state = state;
-                console.log(`${creep.name} out of energy, switch to harvesting`);
+                log('DEBUG', `out of energy, switch to harvesting`, creep);
             } else {
-                console.log(`${creep.name} repair error: ${result}`);
+                log('WARN', `repair error: ${result}`, creep);
             }
             return;
         }

@@ -1,5 +1,7 @@
 const _ = require('lodash');
 const baseRole = require('./role.base');
+const utils = require('./utils');
+const { log } = utils;
 
 module.exports = {
     run: (creep) => {
@@ -51,7 +53,7 @@ module.exports = {
                     visualizePathStyle: { stroke: '#ff6600' },
                     range: 1
                 });
-                creep.say('➡️ LEAVE SPAWN');
+                creep.say('➡️ LEAVE');
                 creep.memory.justRetreated = true;
                 return;
             } else {
@@ -82,7 +84,7 @@ module.exports = {
                         visualizePathStyle: { stroke: '#ff6600' },
                         range: 1
                     });
-                    creep.say('➡️ FORCED RETREAT');
+                    creep.say('➡️ FORCED');
                     creep.memory.justRetreated = true;
                     return;
                 }
@@ -98,7 +100,7 @@ module.exports = {
         if (baseRole.handleReturningHome(creep)) return;
 
         if (!room || !room.storage) {
-            creep.say('🚫 no storage');
+            creep.say('🚫 storage');
             return;
         }
 
@@ -107,7 +109,8 @@ module.exports = {
             creep.memory.state = 'delivering';
             creep.memory.targetId = null;
             creep.memory.resourceType = null;
-            console.log(`${creep.name}: Принудительная доставка (осталось ${creep.ticksToLive} тиков}`);
+            creep.say(`☠️ in ${creep.ticksToLive}`);
+            log('INFO', `Принудительная доставка (осталось ${creep.ticksToLive} тиков}`, creep);
         }
 
         // 4. Переключение состояний
@@ -161,13 +164,13 @@ module.exports = {
             if (creep.pos.isNearTo(container)) {
                 const result = creep.withdraw(container, resourceType);
                 if (result === OK) {
-                    creep.say(`✅ get ${resourceType}`);
-                    console.log(`${creep.name} забрал ${resourceType} из контейнера ${container.id}`);
+                    creep.say(`✅ get (${resourceType})`);
+                    log('INFO', `забрал ${resourceType} из контейнера ${container.id}`, creep);
                 } else if (result === ERR_NOT_ENOUGH_RESOURCES) {
                     creep.memory.targetId = null;
                     creep.memory.resourceType = null;
                 } else {
-                    console.log(`${creep.name} ошибка withdraw: ${result}`);
+                    log('WARN', `ошибка withdraw: ${result}`, creep);
                 }
             } else {
                 creep.moveTo(container, {
@@ -187,8 +190,8 @@ module.exports = {
                     if (resourceType === RESOURCE_ENERGY) continue;
                     const result = creep.transfer(storage, resourceType);
                     if (result === OK) {
-                        creep.say(`🚚 put ${resourceType}`);
-                        console.log(`${creep.name} передал ${resourceType} в storage`);
+                        creep.say(`🚚 put (${resourceType})`);
+                        log('INFO', `передал ${resourceType} в storage`, creep);
                     }
                 }
             } else {

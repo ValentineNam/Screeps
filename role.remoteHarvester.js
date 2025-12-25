@@ -43,7 +43,7 @@ module.exports = {
         if (creep.memory.state === 'harvesting') {
             const targetRoomName = creep.memory.targetRoom;
             
-            console.log(`${creep.name} state: ${creep.memory.state}`)
+            log('DEBUG', `state: ${creep.memory.state}`, creep);
 
             // Если в не целевой комнате — идем туда
             if (creep.room.name !== targetRoomName && creep.store.getUsedCapacity() === 0) {
@@ -86,7 +86,7 @@ module.exports = {
                 if (harvestResult == ERR_NOT_IN_RANGE) {
                     creep.moveTo(source, {visualizePathStyle: {stroke: '#ffaa00'}});
                 } else if (harvestResult != OK) {
-                    console.log(`Harvest error: ${harvestResult}`);
+                    log('ERROR', `harvest error: ${harvestResult}`, creep);
                     if (harvestResult == ERR_NOT_ENOUGH_RESOURCES || harvestResult == ERR_INVALID_TARGET) {
                         delete creep.memory.sourceId;
                     }

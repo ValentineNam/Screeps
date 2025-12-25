@@ -94,13 +94,34 @@ const roomDataService = {
     },
 
     _determineStage(room, structures) {
-        const energy = room.energyCapacityAvailable;
-        const controller = room.controller;
+        // Новая логика стадий (см. BASE_STAGES в config.constants)
+        if (!room || !room.controller) return 'stage0';
 
-        if (energy < 550) return 'Stage1';
-        if (controller && controller.level >= 3 && controller.level <= 5) return 'Stage2';
-        if (controller && controller.level >= 6) return 'Stage3';
-        return 'Unknown';
+        const level = room.controller.level || 0;
+        const energyCap = room.energyCapacityAvailable || 0;
+
+        // Считаем количество links, labs и наличие терминала
+        const linksCount = structures.filter(s => s.type === STRUCTURE_LINK).length;
+        const labsCount = structures.filter(s => s.type === STRUCTURE_LAB).length;
+        const hasTerminal = structures.some(s => s.type === STRUCTURE_TERMINAL);
+
+        // stage5: 7 уровень и links >= 4
+        if (level >= 7 && linksCount >= 4) return 'stage5';
+
+        // stage4: 6 уровень и links = 3, 3 лаборатории и терминал
+        if (level >= 6 && linksCount >= 3 && labsCount >= 3 && hasTerminal) return 'stage4';
+
+        // stage3: 5 уровень и links = 2
+        if (level >= 5 && linksCount >= 2) return 'stage3';
+
+        // stage2: 2 - 5 уровень и максимум энергии 550 или больше
+        if (level >= 2 && level <= 5 && energyCap >= 550) return 'stage2';
+
+        // stage1: 0 - 2 уровень или максимум энергии в расширениях и спавне меньше 550
+        if (level <= 2 || energyCap < 550) return 'stage1';
+
+        // На всякий случай
+        return 'stage1';
     }
 };
 

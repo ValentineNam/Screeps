@@ -1,12 +1,32 @@
 const sourcesModule = require('./utils'); // ваш модуль поиска источников
 const targetRooms = ['E19S7']; // список целевых комнат
 
+// Настройки
+const WAIT_TIMEOUT = 50; // ticks to wait on source before switching to delivering
+const EDGE_MARGIN = 1; // позиции на расстоянии <= EDGE_MARGIN от границы считаются 'на границе'
+
+function handleEdgePosition(creep) {
+    // Если крип стоит на границе комнаты — уводим его внутрь
+    if (!creep || !creep.pos) return false;
+    const x = creep.pos.x, y = creep.pos.y;
+    if (x <= EDGE_MARGIN || x >= 49 - EDGE_MARGIN || y <= EDGE_MARGIN || y >= 49 - EDGE_MARGIN) {
+        // Цель — центр комнаты, чтобы выйти из края
+        const center = new RoomPosition(25, 25, creep.room.name);
+        creep.moveTo(center, { visualizePathStyle: { stroke: '#ff0000' }, reusePath: 20 });
+        return true;
+    }
+    return false;
+}
+
 module.exports = {
     run: (creep) => {
         // Инициализация состояния
         if (!creep.memory.state) {
             creep.memory.state = 'harvesting';
         }
+
+        // Если крип на краю комнаты — сначала уйдём внутрь, чтобы не застревать
+        if (handleEdgePosition(creep)) return;
 
         // Переключение состояний
         if (creep.memory.state === 'harvesting' && creep.store.getFreeCapacity() === 0) {

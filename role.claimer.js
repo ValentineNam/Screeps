@@ -1,3 +1,4 @@
+const baseRole = require('./role.base');
 const constants = require('./config.constants');
 const DESIRED_COUNTS = constants.DESIRED_COUNTS;
 
@@ -16,31 +17,25 @@ function isAllowedClaimRoom(roomName) {
 
 module.exports = {
     run: (creep) => {
-        const targetRoomName = 'E19N1';
-
-
-        // Инициализация памяти
-        if (!creep.memory.targetRoom) {
-            creep.memory.targetRoom = creep.room.name;
-        }
+        // Инициализация памяти и валидация состояния
         if (!creep.memory.state) {
             creep.memory.state = 'claim';
         }
+        baseRole.validateState(creep, ['claim'], 'claim');
 
-        // const targetRoom = targetRoomName;
-
-        // -- отправить в комнату --
-        // const targetRoomName = creep.memory.homeRoom == 'E19S8' ? 'E18S8' : creep.memory.homeRoom; // целевая комната
-        // // Запоминаем целевую комнату в памяти, чтобы не задавать каждый раз
-        if (!creep.memory.targetRoom) {
-            creep.memory.targetRoom = targetRoomName;
+        // Авто-возврат при низком HP
+        if (baseRole.checkHealth(creep)) {
+            baseRole.returnHome(creep, creep.memory.homeRoom);
+            return;
         }
+        if (baseRole.handleReturningHome(creep)) return;
 
-        // if (creep.memory.targetRoom !== targetRoomName) {
-        //     creep.memory.targetRoom = targetRoomName;
-        // }
-
-        const targetRoom = creep.memory.targetRoom;
+        // Определяем целевую комнату: сначала память крипа, затем targetRoom из homeRoom (если задан), иначе текущая комната
+        let targetRoom = creep.memory.targetRoom;
+        if (!targetRoom) {
+            targetRoom = creep.memory.homeRoom || creep.room.name;
+            creep.memory.targetRoom = targetRoom;
+        }
 
         // Если не в целевой комнате, перемещаемся туда
         if ((creep.room.name !== creep.memory.targetRoom) && creep.store.getUsedCapacity() == 0) {
@@ -79,11 +74,9 @@ module.exports = {
 
         // 5. Проверяем статус контроллера
         if (controller.owner) {
-            console.log(`Контроллер в ${targetRoom} уже захвачен игроком: ${controller.owner.username}`);
+            console.log(`${creep.name}: Контроллер в ${targetRoom} уже захвачен игроком: ${controller.owner.username}`);
             return;
         }
-
-        // 6. Устанавливаем/обновляем подпись комнаты
         // if (controller.my || (controller.reservation && controller.reservation.username === creep.owner.username)) {
         //     const signText = `База: ${targetRoom} | Владелец: ${creep.owner.username}`;
 
@@ -113,39 +106,33 @@ module.exports = {
         // }
 
 
-        // 7. Попытка захвата
+        // 7. Попытка захвата — если не удаётся, обязательно пытаемся резервировать контроллер каждый тик,
+        // чтобы поддерживать резерв непрерывно (не ждать, пока он закончится до 0)
         const claimResult = creep.claimController(controller);
-        
+
         if (claimResult === OK) {
             console.log(`${creep.name} успешно захватил комнату ${targetRoom}`);
             return; // После захвата можно выйти
         }
-        
+
         if (claimResult === ERR_NOT_IN_RANGE) {
             creep.moveTo(controller, { visualizePathStyle: { stroke: '#ffffff' } });
             return;
         }
 
-        // 8. Попытка зарезервировать контроллер
-        if ([ERR_GCL_NOT_ENOUGH, ERR_INVALID_TARGET].includes(claimResult)) {
-            const reserveResult = creep.reserveController(controller);
-            
-            if (reserveResult === OK) {
-                console.log(`${creep.name} обновил/установил резерв контроллера в ${targetRoom}`);
-                // Тут не делайте return, чтобы продолжить в следующий тик
-            } else if (reserveResult === ERR_NOT_IN_RANGE) {
-                creep.moveTo(controller, { visualizePathStyle: { stroke: '#00ff00' } });
-                // Не делайте return, чтобы попытка повторилась снова
-            } else {
-                console.log(`${creep.name} не смог зарезервировать контроллер: ${reserveResult}`);
-                // Аналогично, не делайте return, чтобы попытки продолжались
-            }
-            // Важно: не делайте return
+        // Если не удалось захватить (по любой причине, например GCL), пробуем резервировать.
+        const reserveResult = creep.reserveController(controller);
+        if (reserveResult === OK) {
+            console.log(`${creep.name} обновил/установил резерв контроллера в ${targetRoom} (reserve)`);
+            return;
         }
 
-        // 9. Другие ошибки
-        else {
-            console.log(`${creep.name} ошибка при захвате: ${claimResult}`);
+        if (reserveResult === ERR_NOT_IN_RANGE) {
+            creep.moveTo(controller, { visualizePathStyle: { stroke: '#00ff00' } });
+            return;
         }
+
+        // Другие случаи — логируем, но не останавливаем попытки в следующих тиках
+        console.log(`${creep.name}: не смог выполнить reserveController (claimResult=${claimResult}, reserveResult=${reserveResult})`);
     }
 };

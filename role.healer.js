@@ -1,92 +1,228 @@
-const sourcesModule = require('./utils');
-const mainSpawn = 'W5S12SPAWN1';
+const _ = require('lodash');
+const constants = require('./config.constants');
 
 module.exports = {
     run: (creep) => {
-        // Инициализация состояния
-        if (!creep.memory.state) {
-            creep.memory.state = 'harvesting';
-        }
+        // 1. Инициализация памяти
+        if (!creep.memory.state) creep.memory.state = 'patrol';
+        if (!creep.memory.targetId) creep.memory.targetId = null;
+        if (!creep.memory.targetRoom) creep.memory.targetRoom = constants.DEFAULT_HEAL_ROOM;
+        if (creep.memory.justRetreated) delete creep.memory.justRetreated;
 
-        // Объявляем врагов
-        const enemies = creep.room.find(FIND_HOSTILE_CREEPS);
+        const room = creep.room;
+        const roomName = room.name;
 
-        // Ищем раненого союзника
-        const wounded = sourcesModule.findClosestWounded(creep);
-
-        // Переключение режимов
-        if (wounded && creep.memory.state !== 'healing') {
-            creep.memory.state = 'healing';
-            console.log(`${creep.name} switches to healing mode`);
-        } else if (!wounded && creep.memory.state !== 'harvesting') {
-            creep.memory.state = 'harvesting';
-            console.log(`${creep.name} switches to harvesting mode`);
-        }
-
-        // Поведение в режиме исцеления
-        if (creep.memory.state === 'healing') {
-            if (enemies.length > 0) {
-                // В случае врагов, возможно, стоит приоритетно их атаковать или избегать
-                // Но в вашем случае, похоже, лечим
-                if (wounded) {
-                    const target = sourcesModule.moveToWounded(creep, wounded);
-                    if (target && creep.heal(target) == ERR_NOT_IN_RANGE) {
-                        creep.moveTo(target);
-                    }
-                }
-            } else if (wounded) {
-                const target = sourcesModule.moveToWounded(creep, wounded);
-                if (target && creep.heal(target) == ERR_NOT_IN_RANGE) {
-                    creep.moveTo(target);
-                }
+        // 2. Переход в целевую комнату (если не там)
+        if (roomName !== creep.memory.targetRoom) {
+            const targetPos = new RoomPosition(25, 25, creep.memory.targetRoom);
+            if (creep.moveTo(targetPos, {
+                visualizePathStyle: { stroke: '#ffff00' },
+                maxRooms: 10,
+                reusePath: 5
+            }) !== OK) {
+                console.log(`${creep.name}: Не могу перейти в ${creep.memory.targetRoom}`);
             }
             return;
         }
 
-        // Нет раненых — собираем ресурсы
-        if (creep.memory.state === 'harvesting') {
-            // Если есть свободная емкость, добываем энергию
-            if (creep.store.getFreeCapacity() > 0) {
-                if (!creep.memory.sourceId) {
-                    const source = sourcesModule.findAvailableSource(creep);
-                    if (source) {
-                        creep.memory.sourceId = source.id;
-                    } else {
-                        return; // Нет источников
-                    }
+        // 3. Проверка на близость к спавну → срочный отход
+        const spawns = room.find(FIND_MY_SPAWNS);
+        const isNearSpawn = spawns.some(spawn =>
+            creep.pos.isEqualTo(spawn.pos) || creep.pos.inRangeTo(spawn.pos, 1)
+        );
+
+        if (isNearSpawn) {
+            const controller = room.controller;
+            if (controller) {
+                let retreatPos = null;
+
+                // Попытка найти точку около контроллера (радиус 5–12 клеток)
+                for (let i = 0; i < 10; i++) {
+                    const radius = _.random(5, 12);
+                    const angle = _.random() * Math.PI * 2;
+                    const x = Math.round(controller.pos.x + radius * Math.cos(angle));
+                    const y = Math.round(controller.pos.y + radius * Math.sin(angle));
+
+
+                    if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+
+                    retreatPos = new RoomPosition(x, y, roomName);
+                    const terrain = room.lookForAt(LOOK_TERRAIN, x, y)[0].terrain;
+                    if (terrain !== 'plain') continue;
+
+                    // Проверка удалённости от спавнов (минимум 3 клетки)
+                    const tooClose = spawns.some(spawn => retreatPos.inRangeTo(spawn.pos, 3));
+                    if (tooClose) continue;
+
+                    break; // нашли валидную точку
                 }
-                const source = Game.getObjectById(creep.memory.sourceId);
-                if (source) {
-                    const harvestResult = creep.harvest(source);
-                    if (harvestResult == ERR_NOT_IN_RANGE) {
-                        creep.moveTo(source, {visualizePathStyle: {stroke: '#ffaa00'}});
-                    } else if (harvestResult != OK) {
-                        console.log(`Harvest error: ${harvestResult}`);
-                    }
+
+                if (retreatPos) {
+                    creep.moveTo(retreatPos, {
+                        visualizePathStyle: { stroke: '#ff6600' },
+                        range: 3
+                    });
+                    creep.say('➡️ LEAVE SPAWN');
+                    creep.memory.justRetreated = true;
+                    return;
                 } else {
-                    delete creep.memory.sourceId;
-                }
-            } else {
-                // Емкость полная — передача энергии
-                // Ищем расширения с свободной емкостью
-                const extensions = creep.room.find(FIND_MY_STRUCTURES, {
-                    filter: (structure) => 
-                        structure.structureType === STRUCTURE_EXTENSION && 
-                        structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-                });
-                if (extensions.length > 0) {
-                    const targetExtension = creep.pos.findClosestByPath(extensions);
-                    if (targetExtension && creep.transfer(targetExtension, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
-                        creep.moveTo(targetExtension, {visualizePathStyle: {stroke: '#ffffff'}});
+                    // Аварийный отступ: 3–5 клеток в случайном направлении
+                    const possibleMoves = [];
+                    for (let r = 3; r <= 5; r++) {
+                        for (let angle = 0; angle < 360; angle += 45) {
+                            const x = Math.round(creep.pos.x + r * Math.cos(angle * Math.PI / 180));
+                            const y = Math.round(creep.pos.y + r * Math.sin(angle * Math.PI / 180));
+
+
+                            if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+
+                            const pos = new RoomPosition(x, y, roomName);
+                            const terrain = room.lookForAt(LOOK_TERRAIN, x, y)[0].terrain;
+                            if (terrain === 'wall') continue;
+
+                            const tooClose = spawns.some(spawn => pos.inRangeTo(spawn.pos, 3));
+                            if (tooClose) continue;
+
+                            possibleMoves.push(pos);
+                        }
                     }
-                    return; // После передачи не идем дальше
-                }
-                // Если расширения заполнены, идем в спавн
-                const spawn = Game.spawns[mainSpawn];
-                if (spawn && creep.transfer(spawn, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
-                    creep.moveTo(spawn, {visualizePathStyle: {stroke: '#ffffff'}});
+
+                    if (possibleMoves.length > 0) {
+                        const targetPos = _.sample(possibleMoves);
+                        creep.moveTo(targetPos, {
+                            visualizePathStyle: { stroke: '#ff6600' },
+                            range: 1
+                        });
+                        creep.say('➡️ FORCED RETREAT');
+                        creep.memory.justRetreated = true;
+                        return;
+                    }
                 }
             }
         }
+
+        // 4. Проверка собственного здоровья
+        if (creep.hits < creep.hitsMax) {
+            // Лечим себя, если мы ранены
+            creep.heal(creep);
+            creep.rangedHeal(creep);
+            creep.say('❤️ SELF HEAL');
+            return;
+        }
+
+        // 5. Поиск целей
+        const friendlyCreeps = room.find(FIND_MY_CREEPS, {
+            filter: c => c.id !== creep.id
+        });
+
+        // Приоритет: раненые defender/guardian с наибольшим max HP
+        let target = null;
+        const defenders = friendlyCreeps.filter(c =>
+            ['defender', 'guardian'].includes(c.memory.role)
+        );
+
+        const injuredDefenders = defenders
+            .filter(c => c.hits < c.hitsMax)
+            .sort((a, b) => b.hitsMax - a.hitsMax); // по убыванию max HP
+
+        target = injuredDefenders.length > 0 ? injuredDefenders[0] : null;
+
+        // Если нет защитников — ищем любого раненого
+        if (!target) {
+            const injuredCreeps = friendlyCreeps
+                .filter(c => c.hits < c.hitsMax)
+                .sort((a, b) => (a.hits / a.hitsMax) - (b.hits / b.hitsMax)); // по % HP
+
+
+            target = injuredCreeps.length > 0 ? injuredCreeps[0] : null;
+        }
+
+        // 5. Логика действий
+        if (target) {
+            creep.memory.state = 'heal';
+            const distance = creep.pos.getRangeTo(target);
+
+            // Подход к цели
+            if (distance > 3) {
+                creep.moveTo(target, {
+                    visualizePathStyle: { stroke: '#00ff00' },
+                    range: 3,
+                    reusePath: 5
+                });
+                creep.say('➡️ APPROACH');
+            } 
+            // Лечение
+            else if (distance <= 3) {
+                creep.heal(target);
+                creep.say(`💚 HEAL ${target.memory.role || 'creep'}`);
+
+
+                // Отступ от врагов
+                const hostileCreeps = room.find(FIND_HOSTILE_CREEPS);
+                const closestHostile = creep.pos.findClosestByRange(hostileCreeps);
+
+                if (closestHostile && creep.pos.getRangeTo(closestHostile) < 5) {
+                    const retreatPos = creep.pos.findPathTo(
+                        closestHostile,
+                        { ignoreCreeps: true, flee: true, maxRooms: 1 }
+                    )[0] || creep.pos;
+
+                    if (!creep.pos.isEqualTo(retreatPos)) {
+                        creep.moveTo(retreatPos, {
+                            visualizePathStyle: { stroke: '#ff9900' },
+                            range: 0
+                        });
+                    }
+                }
+            }
+        } else {
+            // Нет раненых → патрулирование
+            creep.memory.state = 'patrol';
+            const controller = room.controller;
+
+            if (controller) {
+                let patrolPos = null;
+
+                // Генерация случайной точки в радиусе 5–10 от контроллера
+                for (let i = 0; i < 10; i++) {
+                    const radius = _.random(5, 10);
+                    const angle = _.random() * Math.PI * 2;
+                    const x = Math.round(controller.pos.x + radius * Math.cos(angle));
+                    const y = Math.round(controller.pos.y + radius * Math.sin(angle));
+
+                    if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+
+                    patrolPos = new RoomPosition(x, y, roomName);
+
+                    const terrain = room.lookForAt(LOOK_TERRAIN, x, y)[0].terrain;
+                    if (terrain !== 'plain') continue;
+
+                    // Проверка удалённости от спавнов (минимум 3 клетки)
+                    const tooClose = spawns.some(spawn => patrolPos.inRangeTo(spawn.pos, 3));
+                    if (tooClose) continue;
+
+                    break; // нашли валидную точку
+                }
+
+                // Если точка найдена и мы не на ней — идём
+                if (patrolPos && !creep.pos.isEqualTo(patrolPos)) {
+                    creep.moveTo(patrolPos, {
+                        visualizePathStyle: { stroke: '#ffff00' },
+                        range: 1,
+                        reusePath: 3
+                    });
+                    creep.say('🛡️ PATROL');
+                } else {
+                    // Если не смогли найти точку — остаёмся на месте
+                    creep.say('⏳ WAIT');
+                }
+            } else {
+                // Нет контроллера — просто ждём
+                creep.say('⏳ NO CTRL');
+            }
+        }
+
+        // 6. Обновление targetId в памяти
+        creep.memory.targetId = target ? target.id : null;
     }
 };

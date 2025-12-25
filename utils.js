@@ -262,9 +262,26 @@ module.exports = {
     },
 
     findNearestContainerWithEnergy: (creep, minEnergy = 0) => {
+        // Используем кешированные данные из Memory.rooms
+        const targetRoom = creep.memory.targetRoom || creep.room.name;
+        const roomData = Memory.rooms && Memory.rooms[targetRoom];
+        
+        if (roomData && roomData.structures) {
+            // Ищем контейнеры с энергией в закешированных структурах
+            const cachedContainers = roomData.structures
+                .filter(s => s.type === STRUCTURE_CONTAINER && s.store && (s.store[RESOURCE_ENERGY] || 0) >= minEnergy)
+                .map(s => Game.getObjectById(s.id))
+                .filter(Boolean);
+                
+            if (cachedContainers.length > 0) {
+                return creep.pos.findClosestByPath(cachedContainers);
+            }
+        }
+        
+        // Резервный вариант - обращение к игровому движку
         const containers = creep.room.find(FIND_STRUCTURES, {
-            filter: (structure) => 
-                structure.structureType === STRUCTURE_CONTAINER && 
+            filter: (structure) =>
+                structure.structureType === STRUCTURE_CONTAINER &&
                 structure.store.getUsedCapacity(RESOURCE_ENERGY) >= minEnergy
         });
         if (containers.length > 0) {
@@ -291,7 +308,18 @@ module.exports = {
     countCreepsByRoleAndRoom: (role, roomName) => _.filter(Game.creeps, c => c.memory.role === role && c.memory.homeRoom === roomName).length,
 
     countCreepsByRole: (role, homeRoom, targetRoom, opts = {}) => {
-        return _.filter(Game.creeps, creep => {
+        // Используем кешированные данные из Memory для уменьшения обращений к Game.creeps
+        if (!Memory.creepCounts) Memory.creepCounts = {};
+        const resourceType = opts.resourceType || 'any';
+        const cacheKey = `${role}_${homeRoom}_${targetRoom || 'any'}_${resourceType}`;
+        const cached = Memory.creepCounts[cacheKey];
+        
+        // Кешируем результат на 5 тиков
+        if (cached && cached.tick && Game.time - cached.tick < 5) {
+            return cached.count;
+        }
+        
+        const count = _.filter(Game.creeps, creep => {
             if (creep.memory.role !== role) return false;
             if (creep.memory.homeRoom !== homeRoom) return false;
             if (targetRoom && creep.memory.targetRoom !== targetRoom) return false;
@@ -302,6 +330,14 @@ module.exports = {
             
             return true;
         }).length;
+        
+        // Сохраняем в кеш
+        Memory.creepCounts[cacheKey] = {
+            count: count,
+            tick: Game.time
+        };
+        
+        return count;
     },
 
 
@@ -440,6 +476,14 @@ module.exports = {
     },
 
     hasContainerInRoom: (roomName) => {
+        // Используем кешированные данные из Memory.rooms
+        const roomData = Memory.rooms && Memory.rooms[roomName];
+        if (roomData && roomData.structures) {
+            // Проверяем наличие контейнеров в закешированных структурах
+            return roomData.structures.some(s => s.type === STRUCTURE_CONTAINER);
+        }
+        
+        // Резервный вариант - обращение к игровому движку
         const room = Game.rooms[roomName];
         if (!room) return false;
         return room.find(FIND_STRUCTURES, {
@@ -448,6 +492,33 @@ module.exports = {
     },
 
     getThreatLevel: (roomName) => {
+        // Используем кешированные данные из Memory.rooms
+        const roomData = Memory.rooms && Memory.rooms[roomName];
+        if (roomData) {
+            let threat = 0;
+            
+            // Проверяем вражеских крипов из кеша
+            if (roomData.enemies) {
+                threat += roomData.enemies.length * 10;
+            }
+            
+            // Проверяем вражеские структуры из кеша
+            if (roomData.enemyStructures) {
+                threat += roomData.enemyStructures.length * 5;
+            }
+            
+            // Проверяем Invader Core из кеша
+            if (roomData.structures) {
+                const hasInvaderCore = roomData.structures.some(s => s.type === STRUCTURE_INVADER_CORE);
+                if (hasInvaderCore) {
+                    threat += 100;
+                }
+            }
+            
+            return threat;
+        }
+        
+        // Резервный вариант - обращение к игровому движку
         const room = Game.rooms[roomName];
         if (!room) return 0;
 
@@ -457,7 +528,7 @@ module.exports = {
         if (room.find(FIND_STRUCTURES, {
             filter: s => s.structureType === STRUCTURE_INVADER_CORE
         }).length > 0) {
-            threat += 100;
+            threat += 10;
         }
 
         return threat;
@@ -525,6 +596,44 @@ module.exports = {
             const distB = attackerPos.getRangeTo(b.pos);
 
             return distA - distB;
+        });
+    },
+
+    // 🔧 Функция сортировки врагов по приоритету
+    sortEnemiesByPriority: (enemies) => {
+        return enemies.sort((a, b) => {
+            // Приоритет 1: крипы с HEAL
+            const hasHealA = a.body.some(part => part.type === HEAL) || false;
+            const hasHealB = b.body.some(part => part.type === HEAL) || false;
+            if (hasHealA && !hasHealB) return -1;
+            if (!hasHealA && hasHealB) return 1;
+
+            // Приоритет 2: крипы с RANGED_ATTACK или ATTACK
+            const hasAttackA = a.body.some(part => 
+                part.type === RANGED_ATTACK || part.type === ATTACK) || false;
+            const hasAttackB = b.body.some(part =>
+                part.type === RANGED_ATTACK || part.type === ATTACK) || false;
+            if (hasAttackA && !hasAttackB) return -1;
+            if (!hasAttackA && hasAttackB) return 1;
+
+            // Приоритет 3: крипы с CLAIM
+            const hasClaimA = a.body.some(part => part.type === CLAIM) || false;
+            const hasClaimB = b.body.some(part => part.type === CLAIM) || false;
+            if (hasClaimA && !hasClaimB) return -1;
+            if (!hasClaimA && hasClaimB) return 1;
+
+            // Приоритет 4: структуры (у них нет body, поэтому проверяем тип)
+            const isStructureA = !a.body;
+            const isStructureB = !b.body;
+            if (isStructureA && !isStructureB) {
+                // Если оба — структуры, сортируем по HP (сначала более опасные/крупные)
+                return b.hits - a.hits;
+            }
+            if (isStructureA) return 1;  // структуры ниже крипов
+            if (isStructureB) return -1; // структуры ниже крипов
+
+            // Если все проверки не дали результата — считаем равными
+            return 0;
         });
     }
 

@@ -4,19 +4,75 @@ const missionManager = require('./controller.missionManager');
 const state = require('./state');
 const utils = require('./utils');
 
+const getSpawnRules = require('./config.spawnRules');
+
 const BODYPART_COST = constants.BODYPART_COST;
 const BODIES = constants.CREEPS_BODIES;
 const DESIRED = constants.DESIRED_COUNTS;
 
-function pickBody(role, energy, energyCapacity, allowSmall = false) {
-    const options = BODIES[role] || BODIES.worker;
+// Утилита: гарантирует, что в deps есть безопасные заглушки для ожидаемых helper'ов
+function ensureDeps(deps) {
+    const defaults = {
+        pickBody: () => null,
+        getRoomConfig: () => null,
+        hasSufficientBaseCreeps: () => false,
+        getSourceContainers: () => [],
+        selectTargetRoom: () => null,
+        countCreepsByRole: () => 0,
+        getThreatLevel: () => 0,
+        baseMemory: (role, ctx) => ({ role, homeRoom: ctx && ctx.roomName, targetRoom: ctx && ctx.roomName }),
+        memoryFactories: {},
+        RESOURCE_ENERGY: (typeof RESOURCE_ENERGY !== 'undefined') ? RESOURCE_ENERGY : 'energy',
+        nameGenerator: { generateName: (prefix) => `${prefix || 'Creep'}_${(typeof Game !== 'undefined' && Game.time) ? Game.time : Date.now()}` }
+    };
+
+    const out = {};
+    for (const k in defaults) {
+        out[k] = (deps && typeof deps[k] !== 'undefined') ? deps[k] : defaults[k];
+    }
+    // копируем остальные переданные ключи (если есть)
+    if (deps) {
+        for (const k in deps) {
+            if (!(k in out)) out[k] = deps[k];
+        }
+    }
+    return out;
+}
+
+function pickBody(role, energy, energyCapacity, allowSmall = false, ctx = null) {
+    let options = BODIES[role] || BODIES.worker;
+
+    // Если options — объект (маппинг стадий), попробуем выбрать набор по стадии комнаты
+    if (options && !Array.isArray(options)) {
+        let chosen = null;
+        try {
+            const roomName = ctx && ctx.roomName;
+            const memRoom = roomName && Memory.rooms && Memory.rooms[roomName];
+            const stage = memRoom && memRoom.stats && memRoom.stats.stage;
+            if (stage && options[stage]) {
+                chosen = options[stage];
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        // Фоллбэк: попробуем проставить наиболее подходящий набор по убыванию стадии
+        if (!chosen) {
+            const fallbackStages = ['stage5', 'stage4', 'stage3', 'stage2', 'stage1', 'stage0'];
+            for (const s of fallbackStages) {
+                if (options[s]) { chosen = options[s]; break; }
+            }
+        }
+
+        if (chosen) options = chosen; // заменяем на массив тел
+        else options = BODIES.worker || [];
+    }
+
     // Перебираем тела с самого большого (для поиска максимального под capacity)
     for (let i = options.length - 1; i >= 0; i--) {
         const body = options[i];
         const cost = body.reduce((sum, part) => sum + BODYPART_COST[part], 0);
-        
-        console.log(`role: ${role}, cost: ${cost}, body: ${body}`)
-        
+
         // Проверяем по максимуму энергии в комнате (energyCapacity)
         if (cost <= energyCapacity) {
             // Проверяем по доступной энергии (energy)
@@ -26,7 +82,7 @@ function pickBody(role, energy, energyCapacity, allowSmall = false) {
                     return body;
                 }
             } else {
-                // Если энергии сейчас не хватает (cost > energy), то можно выбрать тело, 
+                // Если энергии сейчас не хватает (cost > energy), то можно выбрать тело,
                 // только если allowSmall разрешен и это маленькое тело (i == 0)
                 if (allowSmall && i === 0) {
                     return body;
@@ -60,9 +116,6 @@ const memoryFactories = {
 
         return {
             ...baseMemory('defender', ctx),
-            routeType: nextRouteType,
-            routePoints,
-            routeIndex: 0
         };
     },
 
@@ -112,17 +165,39 @@ function getRoomConfig(roomName) {
 function countCreepsByRole(role, homeRoom, targetRoom = null) {
     if (!role || !homeRoom) return 0; // Защита от undefined
 
-
-    return _.filter(Game.creeps, creep => {
+    // Count active creeps
+    let cnt = _.filter(Game.creeps, creep => {
         if (creep.memory.role !== role) return false;
         if (creep.memory.homeRoom !== homeRoom) return false;
-
-        if (targetRoom && creep.memory.targetRoom !== targetRoom) {
-            return false;
-        }
-
+        if (targetRoom && creep.memory.targetRoom !== targetRoom) return false;
         return true;
     }).length;
+
+    // Include pending reservations (spawn intents) recorded in Memory.spawnPending
+    try {
+        pruneSpawnPending();
+        if (Memory.spawnPending && Memory.spawnPending[homeRoom]) {
+            const pend = Memory.spawnPending[homeRoom].filter(e => e.role === role && (!targetRoom || e.targetRoom === targetRoom));
+            cnt += pend.length;
+        }
+    } catch (e) {
+        // ignore errors reading Memory
+    }
+
+    return cnt;
+}
+
+// Удаляем устаревшие pending-записи
+function pruneSpawnPending() {
+    if (!Memory.spawnPending) return;
+    const now = (typeof Game !== 'undefined' && Game.time) ? Game.time : Date.now();
+    const maxAge = 200; // ticks
+    for (const roomName in Memory.spawnPending) {
+        const arr = Memory.spawnPending[roomName];
+        if (!Array.isArray(arr)) continue;
+        Memory.spawnPending[roomName] = arr.filter(e => (now - (e.time || 0)) <= maxAge);
+        if (Memory.spawnPending[roomName].length === 0) delete Memory.spawnPending[roomName];
+    }
 }
 
 /**
@@ -182,6 +257,14 @@ function selectTargetRoom(homeRoom, role) {
 
 // → НОВОЕ: проверка наличия контейнера в комнате
 function hasContainerInRoom(roomName) {
+    // Используем кешированные данные из Memory.rooms
+    const roomData = Memory.rooms && Memory.rooms[roomName];
+    if (roomData && roomData.structures) {
+        // Проверяем наличие контейнеров в закешированных структурах
+        return roomData.structures.some(s => s.type === STRUCTURE_CONTAINER);
+    }
+    
+    // Резервный вариант - обращение к игровому движку
     const room = Game.rooms[roomName];
     if (!room) return false;
     return room.find(FIND_STRUCTURES, {
@@ -191,11 +274,38 @@ function hasContainerInRoom(roomName) {
 
 // → НОВОЕ: оценка угрозы в комнате
 function getThreatLevel(roomName) {
+    // Используем кешированные данные из Memory.rooms
+    const roomData = Memory.rooms && Memory.rooms[roomName];
+    if (roomData) {
+        let threat = 0;
+        
+        // Проверяем вражеских крипов из кеша
+        if (roomData.enemies) {
+            threat += roomData.enemies.length * 10;
+        }
+        
+        // Проверяем вражеские структуры из кеша
+        if (roomData.enemyStructures) {
+            threat += roomData.enemyStructures.length * 5;
+        }
+        
+        // Проверяем Invader Core из кеша
+        if (roomData.structures) {
+            const hasInvaderCore = roomData.structures.some(s => s.type === STRUCTURE_INVADER_CORE);
+            if (hasInvaderCore) {
+                threat += 100;
+            }
+        }
+        
+        return threat;
+    }
+    
+    // Резервный вариант - обращение к игровому движку
     const room = Game.rooms[roomName];
     if (!room) return 0;
 
     let threat = 0;
-
+    
     // Invader Core — максимальный приоритет
     if (room.find(FIND_STRUCTURES, {
         filter: s => s.structureType === STRUCTURE_INVADER_CORE
@@ -205,13 +315,372 @@ function getThreatLevel(roomName) {
 
     // Враждебные крипы
     threat += room.find(FIND_HOSTILE_CREEPS).length * 10;
-
+    
     // Другие враждебные структуры
     threat += room.find(FIND_STRUCTURES, {
         filter: s => !s.my && s.owner && s.structureType !== STRUCTURE_ROAD
     }).length * 5;
 
     return threat;
+}
+
+// Возвращает список контейнеров, находящихся в радиусе 2 от любого источника в комнате
+function getSourceContainers(roomName) {
+    // Используем кешированные данные из Memory.rooms
+    const roomData = Memory.rooms && Memory.rooms[roomName];
+    if (roomData && roomData.sources && roomData.structures) {
+        // Ищем контейнеры возле источников в закешированных данных
+        const sourcePositions = roomData.sources.map(s => new RoomPosition(s.pos.x, s.pos.y, roomName));
+        const containers = roomData.structures
+            .filter(s => s.type === STRUCTURE_CONTAINER)
+            .map(s => Game.getObjectById(s.id))
+            .filter(Boolean);
+            
+        const sourceContainers = [];
+        for (const src of sourcePositions) {
+            const nearby = src.findInRange(containers, 2);
+            for (const c of nearby) {
+                if (!sourceContainers.some(x => x.id === c.id)) sourceContainers.push(c);
+            }
+        }
+        return sourceContainers;
+    }
+    
+    // Резервный вариант - обращение к игровому движку
+    const room = Game.rooms[roomName];
+    if (!room) return [];
+    const sources = room.find(FIND_SOURCES);
+    const containers = [];
+    for (const src of sources) {
+        const nearby = src.pos.findInRange(FIND_STRUCTURES, 2, { filter: s => s.structureType === STRUCTURE_CONTAINER });
+        for (const c of nearby) {
+            if (!containers.some(x => x.id === c.id)) containers.push(c);
+        }
+    }
+    return containers;
+}
+
+// Запись решения о спавне в Memory (ограниченный журнал)
+function recordSpawnDecision(roomName, entry) {
+    if (!Memory.spawnLastDecision) Memory.spawnLastDecision = {};
+    if (!Memory.spawnLastDecision[roomName]) Memory.spawnLastDecision[roomName] = [];
+    const log = Memory.spawnLastDecision[roomName];
+    log.push(entry);
+
+    // Переменные лимитов: берем из констант, если доступны
+    const maxPerRoom = (constants && constants.SPAWN_LOG_MAX_ENTRIES_PER_ROOM) ? constants.SPAWN_LOG_MAX_ENTRIES_PER_ROOM : 20;
+    const maxRooms = (constants && constants.SPAWN_LOG_MAX_ROOMS) ? constants.SPAWN_LOG_MAX_ROOMS : 10;
+
+    // Оставляем последние maxPerRoom записей в комнате
+    if (log.length > maxPerRoom) log.splice(0, log.length - maxPerRoom);
+
+    // Если комнат в журнале стало слишком много — удаляем старейшую по времени запись (по earliest time)
+    const rooms = Object.keys(Memory.spawnLastDecision);
+    if (rooms.length > maxRooms) {
+        let oldestRoom = null;
+        let oldestTime = Infinity;
+        for (const r of rooms) {
+            const arr = Memory.spawnLastDecision[r];
+            if (!arr || arr.length === 0) continue;
+            // используем время первой записи как признак давности
+            const t = arr[0].time || 0;
+            if (t < oldestTime) {
+                oldestTime = t;
+                oldestRoom = r;
+            }
+        }
+        if (oldestRoom) {
+            delete Memory.spawnLastDecision[oldestRoom];
+        }
+    }
+}
+
+function attemptSpawn(spawn, body, name, mem, ctx, role, reason) {
+    const roomName = ctx && ctx.roomName ? ctx.roomName : (spawn && spawn.room && spawn.room.name ? spawn.room.name : 'unknown');
+    // Ensure pending structure exists and add reservation before actual spawn call
+    if (!Memory.spawnPending) Memory.spawnPending = {};
+    if (!Memory.spawnPending[roomName]) Memory.spawnPending[roomName] = [];
+    Memory.spawnPending[roomName].push({ time: (typeof Game !== 'undefined' && Game.time) ? Game.time : Date.now(), role: role || (mem && mem.role), targetRoom: mem && mem.targetRoom, name: name });
+
+    const res = spawn.spawnCreep(body, name, { memory: mem });
+    if (res === OK) {
+        const cost = body.reduce((s, p) => s + (BODYPART_COST[p] || 0), 0);
+        const entry = {
+            time: (typeof Game !== 'undefined' && Game.time) ? Game.time : Date.now(),
+            role: mem && mem.role ? mem.role : role,
+            reason: reason || 'spawn',
+            targetRoom: mem && mem.targetRoom ? mem.targetRoom : roomName,
+            energy: ctx && ctx.energy ? ctx.energy : null,
+            energyCapacity: ctx && ctx.energyCapacity ? ctx.energyCapacity : null,
+            bodyCost: cost
+        };
+        recordSpawnDecision(roomName, entry);
+        console.log(`[spawnManager:${roomName}] Spawned ${entry.role} (${reason || 'spawn'}) ${name} -> ${entry.targetRoom} cost=${cost}`);
+        // keep the pending entry as a representation of an in-progress spawn (will be pruned later)
+        return true;
+    } else {
+        // неуспех — удаляем pending запись и логируем ошибку
+        try {
+            const arr = Memory.spawnPending && Memory.spawnPending[roomName];
+            if (arr && arr.length) {
+                const idx = arr.findIndex(e => e.name === name && e.role === (role || (mem && mem.role)));
+                if (idx >= 0) arr.splice(idx, 1);
+            }
+        } catch (e) {}
+        console.log(`Failed to spawn ${role || (mem && mem.role) || name}: ${res}`);
+        return false;
+    }
+}
+
+function roomHasConstructionOrContainersOrRoads(roomName) {
+    // Используем кешированные данные из Memory.rooms
+    const roomData = Memory.rooms && Memory.rooms[roomName];
+    if (roomData && roomData.structures) {
+        // Проверяем наличие контейнеров и дорог в закешированных структурах
+        const hasContainers = roomData.structures.some(s => s.type === STRUCTURE_CONTAINER);
+        const hasRoads = roomData.structures.some(s => s.type === STRUCTURE_ROAD);
+        
+        if (hasContainers || hasRoads) return true;
+    }
+    
+    // Для строительных площадок нужно проверить отдельно
+    if (roomData && roomData.constructionSites && roomData.constructionSites.length > 0) {
+        return true;
+    }
+    
+    // Резервный вариант - обращение к игровому движку
+    const room = Game.rooms[roomName];
+    if (!room) return false;
+    if (room.find(FIND_CONSTRUCTION_SITES).length > 0) return true;
+    if (room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_CONTAINER }).length > 0) return true;
+    if (room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_ROAD }).length > 0) return true;
+    return false;
+}
+
+function tryLocalFillPhase(spawn, ctx, allowSmall) {
+    const roomName = ctx.roomName;
+    const config = getRoomConfig(roomName);
+    if (!config) return false;
+    if (spawn.spawning) return false;
+
+    const desired = config.creeps || {};
+
+    // Порядок заполнения: добавили guardian (с 3+ стадии) и healer (с 4+ стадии)
+    const rolesOrder = [
+        'harvester',
+        'miner',
+        'upgrader',
+        'builder',
+        'distributor',
+        'towerman',
+        'logist',
+        'claimer',
+        'guardian',   // ← новая роль
+        'healer'      // ← новая роль
+    ];
+
+    for (const role of rolesOrder) {
+        if (spawn.spawning) break;
+        const current = countCreepsByRole(role, roomName);
+        let want = desired[role] || 0;
+
+        // ... (предыдущие проверки для harvester, miner и др. остаются без изменений)
+
+        if (role === 'guardian') {
+            // Порождаем guardian только если стадия >= 3
+            const stage = Memory.rooms && Memory.rooms[roomName] &&
+                Memory.rooms[roomName].stats && Memory.rooms[roomName].stats.stage;
+            let stageNum = null;
+            if (typeof stage === 'string') {
+                const m = stage.match(/stage(\d+)/);
+                if (m) stageNum = parseInt(m[1], 10);
+            } else if (typeof stage === 'number') {
+                stageNum = stage;
+            }
+            if (!stageNum || stageNum < 3) {
+                continue; // пропускаем guardian если стадия меньше 3
+            }
+
+            // Дополнительно: проверяем наличие хотя бы одного defender/guardian для координации
+            const defenders = Game.rooms[roomName].find(FIND_MY_CREEPS, {
+                filter: c => ['defender', 'guardian'].includes(c.memory.role)
+            });
+            if (!defenders || defenders.length === 0) {
+                want = 0; // не порождаем healer, если нет защитников
+            }
+        }
+
+        if (role === 'healer') {
+            // Порождаем healer только если стадия >= 4
+            const stage = Memory.rooms && Memory.rooms[roomName] &&
+                Memory.rooms[roomName].stats && Memory.rooms[roomName].stats.stage;
+            let stageNum = null;
+            if (typeof stage === 'string') {
+                const m = stage.match(/stage(\d+)/);
+                if (m) stageNum = parseInt(m[1], 10);
+            } else if (typeof stage === 'number') {
+                stageNum = stage;
+            }
+            if (!stageNum || stageNum < 4) {
+                continue; // пропускаем healer если стадия меньше 4
+            }
+
+            // Проверяем наличие защитников/guardians — healer должен их поддерживать
+            const defenders = Game.rooms[roomName].find(FIND_MY_CREEPS, {
+                filter: c => ['defender', 'guardian'].includes(c.memory.role)
+            });
+            if (!defenders || defenders.length === 0) {
+                want = 0; // не порождаем healer без защитников
+            }
+
+            // Также проверяем наличие Storage (для доступа к энергии)
+            const room = Game.rooms[roomName];
+            if (!room || !room.storage) {
+                continue;
+            }
+        }
+
+        if (current < want) {
+            // Выбираем тело в зависимости от роли
+            const bodyRole = role === 'logist' ? 'logist' :
+                           role === 'towerman' ? 'towerman' :
+                           role === 'miner' ? 'miner' :
+                           role === 'claimer' ? 'claimer' :
+                           role === 'distributor' ? 'distributor' :
+                           role === 'guardian' ? 'guardian' :     // ← добавляем guardian
+                           role === 'healer' ? 'healer' :       // ← добавляем healer
+                           role;
+
+            const body = pickBody(bodyRole, ctx.energy, ctx.energyCapacity, allowSmall, ctx);
+            if (!body) continue;
+
+            // Получаем фабрику памяти для роли
+            const memFactory = memoryFactories[role];
+            const mem = memFactory ? memFactory(ctx) : baseMemory(role, ctx);
+
+            // Специальные настройки памяти
+            if (role === 'miner') mem.targetRoom = roomName;
+            if (role === 'distributor') {
+                mem.targetRoom = roomName;
+            }
+            if (role === 'guardian') {
+                mem.targetRoom = roomName;  // для guardian задаём targetRoom
+                mem.role = 'guardian';     // явно указываем роль
+            }
+            if (role === 'healer') {
+                mem.targetRoom = roomName;    // для healer задаём targetRoom
+                mem.role = 'healer';       // явно указываем роль
+            }
+
+            const name = nameGenerator.generateName(role.charAt(0).toUpperCase() + role.slice(1));
+            if (attemptSpawn(spawn, body, name, mem, ctx, role, 'local_fill')) return true;
+        }
+    }
+
+    return false;
+}
+
+
+// Фаза: после локального заполнения — приоритетная замена для remote: crawler, miner, remoteBuilder,
+// если ничего не нужно — потом defender и claimer
+function tryRemoteReplacementPhase(spawn, ctx) {
+    const roomName = ctx.roomName;
+    const config = getRoomConfig(roomName);
+    if (!config || !config.remoteCreeps) return false;
+    if (spawn.spawning) return false;
+
+    const remoteCfg = config.remoteCreeps;
+
+    // 1) Crawler replacement
+    if (remoteCfg.crawler && remoteCfg.crawler.rooms) {
+        for (const target of remoteCfg.crawler.rooms) {
+            if (!Game.rooms[target]) continue;
+            const containers = Game.rooms[target].find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_CONTAINER && _.some(s.store, (amt) => amt > 0) });
+            const current = countCreepsByRole('crawler', roomName, target);
+            const desired = remoteCfg.crawler.count || 0;
+            if (containers.length > 0 && current < desired) {
+                const body = pickBody('logist', ctx.energy, ctx.energyCapacity, false, ctx);
+                if (!body) continue;
+                const mem = memoryFactories.crawler ? memoryFactories.crawler(ctx) : baseMemory('crawler', ctx);
+                mem.targetRoom = target;
+                const name = nameGenerator.generateName('Crawler');
+                if (attemptSpawn(spawn, body, name, mem, ctx, 'crawler', 'remote_replacement')) return true;
+            }
+        }
+    }
+
+    // 2) Remote miner replacement
+    if (remoteCfg.miner && remoteCfg.miner.rooms) {
+        for (const target of remoteCfg.miner.rooms) {
+            if (!Game.rooms[target]) continue;
+            const sourceContainers = getSourceContainers(target);
+            const desiredPerRoom = remoteCfg.miner.count || sourceContainers.length || 0;
+            const desired = Math.min(sourceContainers.length, desiredPerRoom || sourceContainers.length);
+            const current = countCreepsByRole('miner', roomName, target);
+            if (desired > 0 && current < desired) {
+                const body = pickBody('miner', ctx.energy, ctx.energyCapacity, false, ctx);
+                if (!body) continue;
+                const mem = baseMemory('miner', ctx);
+                mem.targetRoom = target;
+                mem.resourceType = (config.remoteCreeps.miner && config.remoteCreeps.miner.resources && config.remoteCreeps.miner.resources[0]) || RESOURCE_ENERGY;
+                const name = nameGenerator.generateName('Miner');
+                if (attemptSpawn(spawn, body, name, mem, ctx, 'miner', 'remote_replacement')) return true;
+            }
+        }
+    }
+
+    // 3) Remote builder replacement
+    if (remoteCfg.remoteBuilder && remoteCfg.remoteBuilder.rooms) {
+        for (const target of remoteCfg.remoteBuilder.rooms) {
+            if (!Game.rooms[target]) continue;
+            if (!roomHasConstructionOrContainersOrRoads(target)) continue;
+            const current = countCreepsByRole('remoteBuilder', roomName, target);
+            const desired = remoteCfg.remoteBuilder.count || 0;
+            if (current < desired) {
+                const body = pickBody('worker', ctx.energy, ctx.energyCapacity, false, ctx);
+                if (!body) continue;
+                const mem = baseMemory('remoteBuilder', ctx);
+                mem.targetRoom = target;
+                const name = nameGenerator.generateName('RemoteBuilder');
+                if (attemptSpawn(spawn, body, name, mem, ctx, 'remoteBuilder', 'remote_replacement')) return true;
+            }
+        }
+    }
+
+    // 4) Если ничего из выше не нужно — порождаем удалённых защитников и клаймеров
+    if (remoteCfg.defender && remoteCfg.defender.rooms) {
+        for (const target of remoteCfg.defender.rooms) {
+            const threat = getThreatLevel(target);
+            if (threat <= 0) continue;
+            const current = countCreepsByRole('defender', roomName, target);
+            const desired = remoteCfg.defender.count || 0;
+            if (current < desired) {
+                const body = pickBody('defender', ctx.energy, ctx.energyCapacity, false, ctx);
+                if (!body) continue;
+                const mem = baseMemory('defender', ctx);
+                mem.targetRoom = target;
+                const name = nameGenerator.generateName('Defender');
+                if (attemptSpawn(spawn, body, name, mem, ctx, 'defender', 'remote_replacement')) return true;
+            }
+        }
+    }
+
+    if (remoteCfg.claimer && remoteCfg.claimer.rooms) {
+        for (const target of remoteCfg.claimer.rooms) {
+            const current = countCreepsByRole('claimer', roomName, target);
+            const desired = remoteCfg.claimer.count || 0;
+            if (current < desired) {
+                const body = pickBody('claimer', ctx.energy, ctx.energyCapacity, false, ctx);
+                if (!body) continue;
+                const mem = baseMemory('claimer', ctx);
+                mem.targetRoom = target;
+                const name = nameGenerator.generateName('Claimer');
+                if (attemptSpawn(spawn, body, name, mem, ctx, 'claimer', 'remote_replacement')) return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 function selectTargetRoom(homeRoom, role) {
@@ -244,18 +713,6 @@ function selectTargetRoom(homeRoom, role) {
         }
     }
 
-    // Для miner: только комнаты, где есть контейнеры у источников (в радиусе 2)
-    // if (role === 'miner') {
-    //     candidateRooms = candidateRooms.filter(roomName => {
-    //         const sourceContainers = getSourceContainers(roomName);
-    //         return sourceContainers.length > 0;
-    //     });
-    //     if (candidateRooms.length === 0) {
-    //         console.log(`[spawnManager] Нет комнат с контейнерами у источников для miner`);
-    //         return null;
-    //     }
-    // }
-
     // Считаем количество крипов по комнатам
     const roomStats = candidateRooms.map(room => ({
         room,
@@ -278,241 +735,8 @@ function selectTargetRoom(homeRoom, role) {
     return roomStats[0].room;
 }
 
-const SPAWN_RULES = [
-    // Локальные роли (работают в homeRoom)
-    { role: 'harvester', bodyRole: 'worker', priority: 100 },
-    { role: 'upgrader', bodyRole: 'worker', priority: 96 },
-    { role: 'builder', bodyRole: 'worker', priority: 94  },
-    { role: 'defender', bodyRole: 'defender', priority: 70  },
-    { role: 'claimer', bodyRole: 'claimer', priority: 30  },
-    { role: 'healer', bodyRole: 'healer', priority: 50  },
-    { role: 'towerman', bodyRole: 'worker', priority: 60  },
-    { role: 'miner', bodyRole: 'miner', priority: 99  },
-    // { role: 'crawler', bodyRole: 'logist', priority: 40  },
-    { role: 'scout', bodyRole: 'scout', priority: 5  },
-    // 1. Майнеры для родной комнаты (homeRoom)
-    {
-        role: 'miner',
-        bodyRole: 'miner',
-        priority: 95,
-        condition: (ctx) => {
-            const config = getRoomConfig(ctx.roomName);
-            if (!config) return false;
-
-            if (!hasSufficientBaseCreeps(ctx.roomName)) return false;
-
-            // Целевая комната = homeRoom
-            const targetRoom = ctx.roomName;
-
-
-            // Проверяем контейнеры у источников в homeRoom
-            const sourceContainers = getSourceContainers(targetRoom);
-            if (sourceContainers.length === 0) return false;
-
-
-            // Считаем текущих майнеров для этой комнаты
-            const currentMiners = countCreepsByRole('miner', ctx.roomName, targetRoom);
-
-            const maxMiners = Math.min(
-                sourceContainers.length,
-                config.localCreeps.miner.count || 0
-            );
-
-            return currentMiners < maxMiners;
-        },
-        memory: (ctx) => ({
-            role: 'miner',
-            homeRoom: ctx.roomName,
-            targetRoom: ctx.roomName, // homeRoom = targetRoom
-            resourceType: (getRoomConfig(ctx.roomName).localMinerResources || [RESOURCE_ENERGY])[0]
-        }),
-        body: (ctx, allowSmall) => pickBody('miner', ctx.energy, ctx.energyCapacity, allowSmall)
-    },
-
-    // 2. Майнеры для удалённых комнат (remote)
-    {
-        role: 'miner',
-        bodyRole: 'miner',
-        isRemote: true,
-        priority: 93,
-        condition: (ctx) => {
-            const config = getRoomConfig(ctx.roomName);
-            if (!config) return false;
-            if (!hasSufficientBaseCreeps(ctx.roomName)) return false;
-
-
-            // Выбираем удалённую комнату для майнинга
-            const targetRoom = selectTargetRoom(ctx.roomName, 'miner');
-            if (!targetRoom) return false;
-
-
-            // Проверяем контейнеры у источников в удалённой комнате
-            const sourceContainers = getSourceContainers(targetRoom);
-            if (sourceContainers.length === 0) return false;
-
-
-            // Считаем текущих майнеров для этой удалённой комнаты
-            const currentMiners = countCreepsByRole('miner', ctx.roomName, targetRoom);
-            const maxMiners = Math.min(
-                sourceContainers.length,
-                config.remoteCreeps.miner.count || 0
-            );
-
-            return currentMiners < maxMiners;
-        },
-        memory: (ctx) => {
-            const base = baseMemory('miner', ctx);
-            base.targetRoom = selectTargetRoom(ctx.roomName, 'miner');
-
-
-            // Определяем ресурс (из конфигурации удалённой комнаты)
-            const resources = getRoomConfig(ctx.roomName).remoteCreeps.miner.resources || [RESOURCE_ENERGY];
-            base.resourceType = _.sample(resources);
-
-
-            return base;
-        },
-        body: (ctx, allowSmall) => pickBody('miner', ctx.energy, ctx.energyCapacity, allowSmall)
-    },
-    {
-        role: 'logist',
-        bodyRole: 'logist',
-        priority: 85,
-        condition: (ctx) => {
-            const room = Game.rooms[ctx.roomName];
-            if (!room) return false;
-
-
-            // 1. Проверяем, есть ли Storage
-            const storage = room.storage;
-            if (!storage) return false;
-
-            // 2. Ищем контейнеры с не‑энергетическими ресурсами
-            const containers = room.find(FIND_STRUCTURES, {
-                filter: (s) =>
-                    s.structureType === STRUCTURE_CONTAINER &&
-                    _.some(s.store, (amt, res) => res !== RESOURCE_ENERGY && amt > 0)
-            });
-
-            if (containers.length === 0) return false;
-
-            // 3. Лимит: не больше 2 логистов на комнату
-            const currentLogists = _.filter(
-                (Game.creeps, creep => 
-                    creep.memory.role === 'logist' &&
-                    creep.room.name === ctx.roomName
-                ).length)
-
-
-            return currentLogists < 2;
-        },
-        memory: (ctx) => ({
-            role: 'logist',
-            homeRoom: ctx.roomName,
-            targetRoom: ctx.roomName,
-            state: 'collecting'
-        })
-    },
-    // Удалённые роли (имеют targetRoom)
-    {
-        role: 'crawler',
-        bodyRole: 'logist',
-        isRemote: true,
-        priority: 89
-    },
-    {
-        role: 'remoteBuilder',
-        bodyRole: 'worker',
-        isRemote: true,
-        priority: 84
-    },
-    {
-        role: 'remoteHarvester',
-        bodyRole: 'worker',
-        isRemote: true,
-        priority: 80,
-        condition: (ctx) => {
-            const config = getRoomConfig(ctx.roomName);
-            if (!config) return false;
-            if (!hasSufficientBaseCreeps(ctx.roomName)) return false;
-
-            const targetRoom = selectTargetRoom(ctx.roomName, 'remoteHarvester');
-            if (!targetRoom) return false;
-
-            const currentCount = countCreepsByRole('remoteHarvester', ctx.roomName, targetRoom);
-            const desiredCount = config.remoteCreeps.remoteHarvester.count || 0;
-
-            return currentCount < desiredCount;
-        },
-            memory: (ctx) => {
-            const base = baseMemory('remoteHarvester', ctx);
-            base.targetRoom = selectTargetRoom(ctx.roomName, 'remoteHarvester');
-
-            // По умолчанию — энергия
-            base.resourceType = RESOURCE_ENERGY;
-
-            return base;
-        },
-        body: (ctx, allowSmall) => pickBody('worker', ctx.energy, ctx.energyCapacity, allowSmall)
-    },
-    {
-        role: 'defender',
-        bodyRole: 'defender',
-        isRemote: true,
-        priority: 50
-    },
-    {
-        role: 'claimer',
-        bodyRole: 'claimer',
-        isRemote: true
-    },
-
-].map(rule => ({
-    ...rule,
-    condition: (ctx) => {
-        const config = getRoomConfig(ctx.roomName);
-        if (!config) return false;
-
-        // → Для НЕ-базовых ролей: проверяем достаточное количество harvester/upgrader
-        if (!['harvester', 'upgrader'].includes(rule.role)) {
-            if (!hasSufficientBaseCreeps(ctx.roomName)) {
-                return false; // Не спавним, пока база не обеспечена
-            }
-        }
-
-        let currentCount = 0;
-        let desiredCount = 0;
-
-        if (rule.isRemote) {
-            const targetRoom = selectTargetRoom(ctx.roomName, rule.role);
-            if (!targetRoom) return false;
-
-            currentCount = countCreepsByRole(rule.role, ctx.roomName, targetRoom);
-            desiredCount = config.remoteCreeps[rule.role].count;
-
-            // Дополнительное условие для defender (как раньше)
-            if (rule.role === 'defender') {
-                const threat = getThreatLevel(targetRoom);
-                if (threat === 0 && currentCount >= 1) return false;
-            }
-        } else {
-            currentCount = countCreepsByRole(rule.role, ctx.roomName);
-            desiredCount = config.creeps[rule.role] || 0;
-        }
-
-        return currentCount < desiredCount;
-    },
-    memory: (ctx) => {
-        const base = baseMemory(rule.role, ctx);
-        
-        if (rule.isRemote) {
-            base.targetRoom = selectTargetRoom(ctx.roomName, rule.role);
-        }
-        
-        return base;
-    },
-    body: (ctx, allowSmall) => pickBody(rule.bodyRole, ctx.energy, ctx.energyCapacity, allowSmall)
-}));
+// SPAWN_RULES previously defined inline here; rules have been moved to `config.spawnRules.js`.
+// The module exports a factory function which accepts helper dependencies and returns the rules array.
 
 // → НОВОЕ: сортировка правил по приоритету
 function sortRulesByPriority(rules) {
@@ -521,6 +745,258 @@ function sortRulesByPriority(rules) {
         const priorityB = b.priority || 0;
         return priorityB - priorityA; // убывание: выше приоритет — раньше в списке
     });
+}
+
+// ФАЗЫ SPAWN'а: выделяем в отдельные функции для пошагового рефакторинга
+function tryLocalPhase(spawn, ctx, allowSmall) {
+    const roomName = ctx.roomName;
+    const config = getRoomConfig(roomName);
+    if (!config) return false;
+
+    if (spawn.spawning) return false;
+    // 1) Если в комнате меньше 5 крипов — обеспечиваем минимум харвестеров
+    if (ctx.localCreepsCount < 5) {
+        const currentHarvesters = countCreepsByRole('harvester', roomName);
+        // Count only miners that target this room (exclude remote miners owned by this controller)
+        const currentMiners = countCreepsByRole('miner', roomName, roomName);
+        const currentUpgraders = countCreepsByRole('upgrader', roomName);
+        const hasContainers = hasContainerInRoom(roomName);
+        console.log(`[spawnManager:${roomName}] localCounts harv=${currentHarvesters} miner=${currentMiners} upg=${currentUpgraders} localTotal=${ctx.localCreepsCount} containers=${hasContainers} energy=${ctx.energy}/${ctx.energyCapacity} allowSmall=${allowSmall}`);
+
+        // a) Если харвестеров меньше 2 — спавним харвестера
+        if (currentHarvesters < 2) {
+            const body = pickBody('worker', ctx.energy, ctx.energyCapacity, allowSmall, ctx);
+            if (body) {
+                const mem = memoryFactories.harvester ? memoryFactories.harvester(ctx) : baseMemory('harvester', ctx);
+                const name = nameGenerator.generateName('Harvester');
+                if (attemptSpawn(spawn, body, name, mem, ctx, 'harvester', 'priority_harvester')) return true;
+            }
+        }
+
+        // b) Если есть враги в комнате — первыми спавним защитников
+        const roomObj = Game.rooms[roomName];
+        const enemyCount = roomObj ? roomObj.find(FIND_HOSTILE_CREEPS).length : 0;
+        if (enemyCount > 0) {
+            const currentDefenders = countCreepsByRole('defender', roomName);
+            const desiredDefenders = (config.creeps && config.creeps.defender) ? config.creeps.defender : 0;
+            if (currentDefenders < desiredDefenders) {
+                const body = pickBody('defender', ctx.energy, ctx.energyCapacity, allowSmall, ctx);
+                if (body) {
+                    const mem = memoryFactories.defender ? memoryFactories.defender(ctx) : baseMemory('defender', ctx);
+                    const name = nameGenerator.generateName('Defender');
+                    if (attemptSpawn(spawn, body, name, mem, ctx, 'defender', 'priority_defender')) return true;
+                }
+            }
+        }
+
+        // c) Если минимум 2 харвестера и есть контейнеры — обеспечиваем минимум 2 майнеров (или до конфигурированного)
+        if (currentHarvesters >= 2 && hasContainers) {
+            const configuredDesiredMiners = (config.creeps && config.creeps.miner) ? config.creeps.miner : 0;
+            const sourceContainers = getSourceContainers(roomName);
+            const availableSlots = sourceContainers.length || 0;
+            // Желаем минимум 2 майнера, но не больше, чем контейнеров и не больше конфигурации
+            const desiredMiners = Math.min(configuredDesiredMiners || 2, Math.max(2, availableSlots));
+            if (currentMiners < desiredMiners) {
+                const body = pickBody('miner', ctx.energy, ctx.energyCapacity, allowSmall, ctx);
+                if (body) {
+                    const mem = memoryFactories.miner ? memoryFactories.miner(ctx) : baseMemory('miner', ctx);
+                    mem.targetRoom = roomName;
+                    mem.resourceType = (config.localMinerResources && config.localMinerResources[0]) || RESOURCE_ENERGY;
+                    const name = nameGenerator.generateName('Miner');
+                    if (attemptSpawn(spawn, body, name, mem, ctx, 'miner', 'priority_miner')) return true;
+                }
+            }
+        }
+
+        // d) Если нет контейнеров / или не хватает апгрейдеров — спавним апгрейдера до желаемого или до cap 5 крипов
+        if (!hasContainers) {
+            const currentUpgraders2 = countCreepsByRole('upgrader', roomName);
+            const desiredUpgraders = (config.creeps && config.creeps.upgrader) ? config.creeps.upgrader : 0;
+            if (ctx.localCreepsCount < 5 && currentUpgraders2 < desiredUpgraders) {
+                const body = pickBody('worker', ctx.energy, ctx.energyCapacity, allowSmall, ctx);
+                if (body) {
+                    const mem = memoryFactories.upgrader ? memoryFactories.upgrader(ctx) : baseMemory('upgrader', ctx);
+                    const name = nameGenerator.generateName('Upgrader');
+                    if (attemptSpawn(spawn, body, name, mem, ctx, 'upgrader', 'priority_upgrader')) return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+function tryDefensePhase(spawn, ctx, allowSmall) {
+    const roomName = ctx.roomName;
+    const config = getRoomConfig(roomName);
+    if (!config) return false;
+    if (spawn.spawning) return false;
+
+    const roomObj = Game.rooms[roomName];
+    const enemyCount = roomObj ? roomObj.find(FIND_HOSTILE_CREEPS).length : 0;
+    const currentDefenders = countCreepsByRole('defender', roomName);
+    const desiredDefenders = (config.creeps && config.creeps.defender) ? config.creeps.defender : 0;
+        if (enemyCount > currentDefenders && currentDefenders < desiredDefenders) {
+        const body = pickBody('defender', ctx.energy, ctx.energyCapacity, allowSmall, ctx);
+        if (body) {
+            const mem = memoryFactories.defender ? memoryFactories.defender(ctx) : baseMemory('defender', ctx);
+            const name = nameGenerator.generateName('Defender');
+            if (attemptSpawn(spawn, body, name, mem, ctx, 'defender', 'defense')) return true;
+        }
+    }
+    return false;
+}
+
+function tryRemotePhase(spawn, ctx, allowSmall) {
+    const roomName = ctx.roomName;
+    const config = getRoomConfig(roomName);
+    if (!config || !config.remoteCreeps) return false;
+    if (spawn.spawning) return false;
+
+    const remoteCfg = config.remoteCreeps;
+
+    // 3.1 CRAWLER: идём по списку rooms и спавним crawler там, где есть контейнеры с энергией
+    if (remoteCfg.crawler && remoteCfg.crawler.rooms) {
+        for (const target of remoteCfg.crawler.rooms) {
+            if (!Game.rooms[target]) continue; // не видим комнату
+            // контейнеры с энергией
+            const containers = Game.rooms[target].find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_CONTAINER && _.some(s.store, (amt) => amt > 0) });
+            const current = countCreepsByRole('crawler', roomName, target);
+            const desired = remoteCfg.crawler.count || 0;
+            if (containers.length > 0 && current < desired) {
+                // Для remote ролей не разрешаем микровариантов
+                const allowSmallForRemote = false;
+                let body = pickBody('logist', ctx.energy, ctx.energyCapacity, allowSmallForRemote, ctx);
+                if (!body) {
+                    console.log(`Skip crawler -> no body fits in ${roomName} (energy ${ctx.energy}/${ctx.energyCapacity})`);
+                    continue;
+                }
+                const mem = memoryFactories.crawler ? memoryFactories.crawler(ctx) : baseMemory('crawler', ctx);
+                mem.targetRoom = target;
+                const name = nameGenerator.generateName('Crawler');
+                if (attemptSpawn(spawn, body, name, mem, ctx, 'crawler', 'remote_priority')) return true;
+            }
+        }
+    }
+
+    // 3.2 REMOTE BUILDER: по списку rooms — если там стройки или контейнеры/дороги
+    if (remoteCfg.remoteBuilder && remoteCfg.remoteBuilder.rooms) {
+        for (const target of remoteCfg.remoteBuilder.rooms) {
+            if (!Game.rooms[target]) continue;
+            if (!roomHasConstructionOrContainersOrRoads(target)) continue;
+            const current = countCreepsByRole('remoteBuilder', roomName, target);
+            const desired = remoteCfg.remoteBuilder.count || 0;
+            if (current < desired) {
+                const body = pickBody('worker', ctx.energy, ctx.energyCapacity, false, ctx);
+                if (body) {
+                    const mem = baseMemory('remoteBuilder', ctx);
+                    mem.targetRoom = target;
+                    const name = nameGenerator.generateName('RemoteBuilder');
+                    if (attemptSpawn(spawn, body, name, mem, ctx, 'remoteBuilder', 'remote_priority')) return true;
+                }
+            }
+        }
+    }
+
+    // 3.3 REMOTE MINER: создаём майнеров по количеству контейнеров возле источников
+    if (remoteCfg.miner && remoteCfg.miner.rooms) {
+        for (const target of remoteCfg.miner.rooms) {
+            if (!Game.rooms[target]) continue;
+            const sourceContainers = getSourceContainers(target);
+            const desiredPerRoom = remoteCfg.miner.count || sourceContainers.length || 0;
+            const desired = Math.min(sourceContainers.length, desiredPerRoom || sourceContainers.length);
+            const current = countCreepsByRole('miner', roomName, target);
+            if (desired > 0 && current < desired) {
+                const body = pickBody('miner', ctx.energy, ctx.energyCapacity, false, ctx);
+                if (body) {
+                    const mem = baseMemory('miner', ctx);
+                    mem.targetRoom = target;
+                    mem.resourceType = (config.remoteCreeps.miner && config.remoteCreeps.miner.resources && config.remoteCreeps.miner.resources[0]) || RESOURCE_ENERGY;
+                    const name = nameGenerator.generateName('Miner');
+                    if (attemptSpawn(spawn, body, name, mem, ctx, 'miner', 'remote_priority')) return true;
+                }
+            }
+        }
+    }
+
+    // 3.4 REMOTE DEFENDERS: равномерно по списку комнат
+    if (remoteCfg.defender && remoteCfg.defender.rooms) {
+        for (const target of remoteCfg.defender.rooms) {
+            // Спавним удалённых защитников только если в целевой комнате есть угроза
+            const threat = getThreatLevel(target);
+            if (threat <= 0) continue; // пропускаем комнату без угрозы
+            const current = countCreepsByRole('defender', roomName, target);
+            const desired = remoteCfg.defender.count || 0;
+            if (current < desired) {
+                const body = pickBody('defender', ctx.energy, ctx.energyCapacity, false, ctx);
+                if (body) {
+                    const mem = baseMemory('defender', ctx);
+                    mem.targetRoom = target;
+                    const name = nameGenerator.generateName('Defender');
+                    if (attemptSpawn(spawn, body, name, mem, ctx, 'defender', 'remote_priority')) return true;
+                }
+            }
+        }
+    }
+
+    // 3.5 CLAIMER: создаём клаймеров для резерва
+    if (remoteCfg.claimer && remoteCfg.claimer.rooms) {
+        for (const target of remoteCfg.claimer.rooms) {
+            const current = countCreepsByRole('claimer', roomName, target);
+            const desired = remoteCfg.claimer.count || 0;
+            if (current < desired) {
+                const body = pickBody('claimer', ctx.energy, ctx.energyCapacity, false, ctx);
+                if (body) {
+                    const mem = baseMemory('claimer', ctx);
+                    mem.targetRoom = target;
+                    const name = nameGenerator.generateName('Claimer');
+                    if (attemptSpawn(spawn, body, name, mem, ctx, 'claimer', 'remote_priority')) return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+// Фаза: проход по декларативным правилам SPAWN_RULES (сохранённая старая логика)
+function tryRulesPhase(spawn, ctx, allowSmall) {
+    if (spawn.spawning) return false;
+    const roomName = ctx.roomName;
+    const SPAWN_RULES = getSpawnRules(ensureDeps({
+        pickBody,
+        getRoomConfig,
+        hasSufficientBaseCreeps,
+        getSourceContainers,
+        selectTargetRoom,
+        countCreepsByRole,
+        getThreatLevel,
+        baseMemory,
+        memoryFactories,
+        RESOURCE_ENERGY,
+        nameGenerator
+    }));
+    const sortedRules = sortRulesByPriority([...SPAWN_RULES]);
+
+    for (const rule of sortedRules) {
+        if (spawn.spawning) break;
+
+        if (rule.condition(ctx)) {
+            const ruleAllowSmall = allowSmall && !rule.isRemote;
+            const body = rule.body(ctx, ruleAllowSmall);
+            if (!body) continue;
+
+            const name = nameGenerator.generateName(
+                rule.role.charAt(0).toUpperCase() + rule.role.slice(1)
+            );
+
+            const mem = rule.memory(ctx);
+            if (attemptSpawn(spawn, body, name, mem, ctx, rule.role, 'rule')) return true;
+            break; // один спавн за тик
+        }
+    }
+
+    return false;
 }
 
 module.exports = {
@@ -551,250 +1027,23 @@ module.exports = {
         // Теперь allowSmall зависит только от локальных крипов и capacity
         const allowSmall = ctx.localCreepsCount < 5 || ctx.energyCapacity <= 300;
 
-        // Сортируем правила по приоритету перед проверкой
-        const sortedRules = sortRulesByPriority([...SPAWN_RULES]);
+        // Запускаем фазы по порядку:
+        // 1) Local initial (min harvesters / miners / upgraders)
+        // 2) Defense immediate (fallback)
+        // 3) Remote priority pass (crawler, remoteBuilder, miner; defenders only if threat)
+        // 4) Local fill (bring local counts up to DESIRED)
+        // 5) Remote replacement (crawler/miner/builder replacements, else defender/claimer)
+        // 6) Rules fallback
+        if (tryLocalPhase(spawn, ctx, allowSmall)) return;
+        if (tryDefensePhase(spawn, ctx, allowSmall)) return;
+        if (tryRemotePhase(spawn, ctx, allowSmall)) return;
+        if (tryLocalFillPhase(spawn, ctx, allowSmall)) return;
+        if (tryRemoteReplacementPhase(spawn, ctx)) return;
 
-        for (const rule of sortedRules) {
-            if (spawn.spawning) break;
-            
-            if (rule.condition(ctx)) {
-                const body = rule.body(ctx, allowSmall);
-                if (!body) continue;
-
-                const name = nameGenerator.generateName(
-                    rule.role.charAt(0).toUpperCase() + rule.role.slice(1)
-                );
-                
-                const mem = rule.memory(ctx);
-                const result = spawn.spawnCreep(body, name, { memory: mem });
-
-
-                if (result === OK) {
-                    console.log(`Spawning ${rule.role}: ${name} in ${roomName} (target: ${mem.targetRoom || 'local'})`);
-                } else {
-                    console.log(`Failed to spawn ${rule.role}: ${result}`);
-                }
-                
-                break; // Один спавн за тик
-            }
-        }
+        // Фаза: правила SPAWN_RULES (декларативные/старые правила)
+        if (tryRulesPhase(spawn, ctx, allowSmall)) return;
     }
 };
 
-// // Creep.reserveController
-// // Spawn.renewCreep
 
-// const constants = require('./constants');
-// const nameGenerator = require('./service.nameGenerator');
-// const utils = require('./utils');
-
-// const BODYPART_COST = constants.BODYPART_COST;
-// const BODIES = constants.CREEPS_BODIES;
-// const DESIRED = constants.DESIRED_COUNTS;
-
-// class SpawnManager {
-//     constructor() {
-//         this.memoryFactories = {
-//             builder: ctx => this.baseMemory('builder', ctx),
-//             claimer: ctx => this.baseMemory('claimer', ctx),
-//             crawler: ctx => this.baseMemory('crawler', ctx),
-//             defender: ctx => ({
-//                 ...this.baseMemory('defender', ctx),
-//                 routeType: null,
-//                 routePoints: [],
-//                 routeIndex: 0
-//             }),
-//             harvester: ctx => ({
-//                 ...this.baseMemory('harvester', ctx),
-//                 resourceType: RESOURCE_ENERGY
-//             }),
-//             miner: ctx => ({
-//                 ...this.baseMemory('miner', ctx),
-//                 resourceType: RESOURCE_ENERGY
-//             }),
-//             upgrader: ctx => this.baseMemory('upgrader', ctx)
-//         };
-//     }
-
-//     baseMemory(role, ctx) {
-//         return {
-//             role,
-//             homeRoom: ctx.roomName,
-//             targetRoom: ctx.roomName,
-//             missionId: null
-//         };
-//     }
-
-//     pickBody(role, energy, energyCapacity, allowSmall = false) {
-//         const options = BODIES[role] || BODIES.worker;
-        
-//         for (let i = options.length - 1; i >= 0; i--) {
-//             const body = options[i];
-//             const cost = body.reduce((sum, part) => sum + BODYPART_COST[part], 0);
-
-//             if (cost <= energyCapacity) {
-//                 if (cost <= energy) {
-//                     if (i > 0 || allowSmall) return body;
-//                 } else if (allowSmall && i === 0) {
-//                     return body;
-//                 }
-//             }
-//         }
-//         return null;
-//     }
-
-//     getRoomConfig(roomName) {
-//         return DESIRED.find(cfg => cfg.homeRoom === roomName);
-//     }
-
-//     hasSufficientBaseCreeps(roomName) {
-//         const config = this.getRoomConfig(roomName);
-//         if (!config) return false;
-
-//         const { harvesterRatio = 0.8, upgraderRatio = 0.6 } = config.baseCoverage || {};
-//         const desiredHarvester = config.creeps.harvester || 0;
-//         const desiredUpgrader = config.creeps.upgrader || 0;
-
-//         const currentHarvester = utils.countCreepsByRole('harvester', roomName);
-//         const currentUpgrader = utils.countCreepsByRole('upgrader', roomName);
-
-//         return (
-//             currentHarvester >= Math.ceil(desiredHarvester * harvesterRatio) &&
-//             currentUpgrader >= Math.ceil(desiredUpgrader * upgraderRatio)
-//         );
-//     }
-
-//     selectTargetRoom(homeRoom, role) {
-//         const config = this.getRoomConfig(homeRoom);
-//         if (!config || !config.remoteCreeps[role]) return null;
-
-//         const rooms = config.remoteCreeps[role].rooms;
-//         if (!rooms.length) return null;
-
-
-//         let candidateRooms = [...rooms];
-
-//         if (role === 'crawler') {
-//             candidateRooms = candidateRooms.filter(r => utils.hasContainerInRoom(r));
-//             if (!candidateRooms.length) return null;
-//         }
-
-//         const roomStats = candidateRooms.map(room => ({
-//             room,
-//             count: utils.countCreepsByRole(role, homeRoom, room),
-//             threat: utils.getThreatLevel(room)
-//         }));
-
-//         roomStats.sort((a, b) => {
-//             if (role === 'defender') {
-//                 return b.threat - a.threat || a.count - b.count;
-//             }
-//             return a.count - b.count;
-//         });
-
-//         return roomStats[0].room;
-//     }
-
-//     sortRulesByPriority(rules) {
-//         return rules.sort((a, b) => (b.priority || 0) - (a.priority || 0));
-//     }
-
-//     run(spawn, baseState) {
-//     const roomName = spawn.room.name;
-//     const config = this.getRoomConfig(roomName);
-//     if (!config) return;
-
-//     const ctx = { /* ... */ };
-//     const allowSmall = ctx.localCreepsCount < 5 || ctx.energyCapacity <= 300;
-
-//     const SPAWN_RULES = [
-//         // Локальные крипы
-//         { role: 'harvester', bodyRole: 'worker', isRemote: false, priority: 1 },
-//         { role: 'upgrader', bodyRole: 'worker', isRemote: false, priority: 1 },
-//         { role: 'builder', bodyRole: 'worker', isRemote: false, priority: 1 },
-//         { role: 'defender', bodyRole: 'defender', isRemote: false, priority: 5 }, // локальный
-
-
-//         // Remote‑крипы
-//         { role: 'remoteHarvester', bodyRole: 'worker', isRemote: true, priority: 2 },
-//         { role: 'remoteBuilder', bodyRole: 'worker', isRemote: true, priority: 2 },
-//         { role: 'remoteDefender', bodyRole: 'defender', isRemote: true, priority: 10 }, // remote
-//         { role: 'claimer', bodyRole: 'claimer', isRemote: true, priority: 3 },
-//         { role: 'crawler', bodyRole: 'logist', isRemote: true, priority: 4 }
-//     ];
-
-//     const sortedRules = this.sortRulesByPriority(SPAWN_RULES);
-
-//     for (const rule of sortedRules) {
-//         if (spawn.spawning) break;
-
-//         if (this.isRuleEligible(rule, ctx)) {
-//             const body = this.pickBody(rule.bodyRole, ctx.energy, ctx.energyCapacity, allowSmall);
-//             if (!body) continue;
-
-//             const name = nameGenerator.generateName(
-//                 rule.role.charAt(0).toUpperCase() + rule.role.slice(1)
-//             );
-
-//             const mem = this.getMemoryForRole(rule, ctx);
-//             const result = spawn.spawnCreep(body, name, { memory: mem });
-
-
-//             if (result === OK) {
-//                 console.log(`Spawning ${rule.role}: ${name} in ${roomName} (target: ${mem.targetRoom || 'local'})`);
-//             } else {
-//                 console.log(`Failed to spawn ${rule.role}: ${result}`);
-//             }
-
-//             break;
-//         }
-//     }
-// }
-
-//     isRuleEligible(rule, ctx) {
-//         const config = this.getRoomConfig(ctx.roomName);
-//         if (!config) return false;
-
-//         // Для не-базовых ролей проверяем наличие базовых крипов
-//         if (!['harvester', 'upgrader'].includes(rule.role)) {
-//             if (!this.hasSufficientBaseCreeps(ctx.roomName)) {
-//                 return false;
-//             }
-//         }
-
-//         let currentCount = 0;
-//         let desiredCount = 0;
-
-//         if (rule.isRemote) {
-//             const targetRoom = this.selectTargetRoom(ctx.roomName, rule.role);
-//             if (!targetRoom) return false;
-
-//             currentCount = utils.countCreepsByRole(rule.role, ctx.roomName, targetRoom);
-//             desiredCount = config.remoteCreeps[rule.role].count;
-
-//             // Дополнительное условие для defender
-//             if (rule.role === 'defender') {
-//                 const threat = utils.getThreatLevel(targetRoom);
-//                 if (threat === 0 && currentCount >= 1) return false;
-//             }
-//         } else {
-//             currentCount = utils.countCreepsByRole(rule.role, ctx.roomName);
-//             desiredCount = config.creeps[rule.role] || 0;
-//         }
-
-//         return currentCount < desiredCount;
-//     }
-
-//     getMemoryForRole(rule, ctx) {
-//         const base = this.memoryFactories[rule.role](ctx);
-
-
-//         if (rule.isRemote) {
-//             base.targetRoom = this.selectTargetRoom(ctx.roomName, rule.role);
-//         }
-
-//         return base;
-//     }
-// }
-
-// module.exports = new SpawnManager();
+// JSON.stringify(Memory.spawnLastDecision && Memory.spawnLastDecision['E17S5'] || [], null, 2)

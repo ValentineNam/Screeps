@@ -1,4 +1,5 @@
 const sourcesModule = require('./utils');
+const baseRole = require('./role.base');
 const constants = require('./config.constants');
 
 module.exports = {
@@ -9,6 +10,14 @@ module.exports = {
         if (!creep.memory.resourceType) creep.memory.resourceType = RESOURCE_ENERGY;
         if (!creep.memory.state) creep.memory.state = 'mining';
         if (!creep.memory.atContainer) creep.memory.atContainer = false;
+
+        // Валидация состояния и авто-возврат при низком HP
+        baseRole.validateState(creep, ['mining', 'moving_to_target', 'waiting'], 'mining');
+        if (baseRole.checkHealth(creep)) {
+            baseRole.returnHome(creep, creep.memory.homeRoom);
+            return;
+        }
+        if (baseRole.handleReturningHome(creep)) return;
 
         const targetRoom = creep.memory.targetRoom;
         const resourceType = creep.memory.resourceType;

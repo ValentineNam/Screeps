@@ -1,15 +1,18 @@
 const sourcesModule = require('./utils');
+const baseRole = require('./role.base');
 const constants = require('./config.constants');
 const myRooms = constants.ROOMS;
 
 module.exports = {
     run: (creep) => {
-        // 1. Инициализация памяти (единый блок)
+        // 1. Инициализация памяти (единый блок) + валидация
         if (!creep.memory.homeRoom) creep.memory.homeRoom = myRooms[0];
         if (!creep.memory.targetRoom) creep.memory.targetRoom = creep.room.name;
-        if (!creep.memory.state) creep.memory.state = 'harvesting';
-        if (!creep.memory.returningHome) creep.memory.returningHome = false;
-        if (!creep.memory.enteredTargetRoom) creep.memory.enteredTargetRoom = false;
+        if (creep.memory.returningHome === undefined) creep.memory.returningHome = false;
+        if (creep.memory.enteredTargetRoom === undefined) creep.memory.enteredTargetRoom = false;
+
+        // Защита от опечаток в состоянии
+        baseRole.validateState(creep, ['harvesting', 'delivering'], 'harvesting');
 
         const targetRoom = creep.memory.targetRoom;
         const homeRoom = creep.memory.homeRoom;
@@ -20,6 +23,12 @@ module.exports = {
             console.log(`${creep.name}: Целевая комната ${targetRoom} недоступна (статус: ${roomStatus.status})`);
             creep.memory.returningHome = true;
             creep.memory.enteredTargetRoom = false;
+            return;
+        }
+
+        // 2b. Если здоровье низкое — возвращаемся домой (auto-return)
+        if (baseRole.checkHealth(creep, 0.5)) {
+            baseRole.returnHome(creep, homeRoom);
             return;
         }
 
@@ -41,6 +50,11 @@ module.exports = {
                 reusePath: 5,
                 visualizePathStyle: { stroke: '#ffff00' }
             });
+            return;
+        }
+
+        // Если крип в режиме возврата домой — обрабатываем это поведение
+        if (baseRole.handleReturningHome(creep)) {
             return;
         }
 
@@ -68,7 +82,7 @@ module.exports = {
 
 
             // Контейнер с энергией
-            const container = sourcesModule.findContainerWithEnergy(creep, freeCap);
+            const container = baseRole.findContainerWithEnergyFromMemory(creep, Math.max(150, freeCap));
             if (container) {
                 if (creep.withdraw(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
                     creep.moveTo(container, { visualizePathStyle: { stroke: '#ffaa00' } });
@@ -76,24 +90,16 @@ module.exports = {
                 return;
             }
 
-            // Хранилище (≥3000 энергии)
-            const storages = creep.room.find(FIND_MY_STRUCTURES, {
-                filter: (structure) =>
-                    structure.structureType === STRUCTURE_STORAGE &&
-                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 30000
-            });
-
-            if (storages.length > 0) {
-                const closestStorage = creep.pos.findClosestByPath(storages);
-                if (closestStorage) {
-                    const withdrawResult = creep.withdraw(closestStorage, RESOURCE_ENERGY);
-                    if (withdrawResult === OK) {
-                        creep.memory.waitStartTick = null;
-                        return;
-                    } else if (withdrawResult === ERR_NOT_IN_RANGE) {
-                        creep.moveTo(closestStorage, { visualizePathStyle: { stroke: '#ff5500' } });
-                        return;
-                    }
+            // Хранилище (≥30000 энергии) — используем данные из Memory
+            const closestStorage = baseRole.findStorageWithEnergyFromMemory(creep, 30000);
+            if (closestStorage) {
+                const withdrawResult = creep.withdraw(closestStorage, RESOURCE_ENERGY);
+                if (withdrawResult === OK) {
+                    creep.memory.waitStartTick = null;
+                    return;
+                } else if (withdrawResult === ERR_NOT_IN_RANGE) {
+                    creep.moveTo(closestStorage, { visualizePathStyle: { stroke: '#ff5500' } });
+                    return;
                 }
             }
 
@@ -113,33 +119,19 @@ module.exports = {
                 return;
             }
 
-            // Источник энергии
+            // Источник энергии (сначала проверяем сохранённый id в памяти)
             let source = Game.getObjectById(creep.memory.sourceId);
 
-            // Проверяем, доступен ли запомненный источник
-            if (source) {
-                // Проверяем, можно ли встать рядом с источником (нет ли других крипов)
-                const creepsOnTile = creep.room.lookForAt(LOOK_CREEPS, source.pos);
-                const isOccupied = creepsOnTile.some(c => c.id !== creep.id);
-
-                if (isOccupied) {
-                    console.log(`${creep.name}: Источник ${source.id} занят. Ищем альтернативу.`);
-                    delete creep.memory.sourceId;
-                    source = null;
-                }
-            }
-
-            // Если нет действующего источника — ищем новый
+            // Если запомненный источник недоступен или занят — найдём новый, используя Memory.rooms
             if (!source) {
-                source = sourcesModule.findAvailableSource(creep);
-                if (source) {
-                    creep.memory.sourceId = source.id;
-                } else {
+                source = baseRole.findAvailableSourceFromMemory(creep);
+                if (!source) {
                     // Нет источника — идём в центр комнаты
                     const safePos = new RoomPosition(25, 25, targetRoom);
                     creep.moveTo(safePos, {
                         maxRooms: 1,
                         reusePath: 5,
+                        visualizePath: true,
                         visualizePathStyle: { stroke: '#ffff00' }
                     });
                     delete creep.memory.sourceId;

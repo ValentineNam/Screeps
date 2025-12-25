@@ -1,4 +1,5 @@
 const _ = require('lodash');
+const baseRole = require('./role.base');
 
 module.exports = {
     run: (creep) => {
@@ -6,24 +7,110 @@ module.exports = {
         if (!creep.memory.state) creep.memory.state = 'collecting';
         if (!creep.memory.targetId) creep.memory.targetId = null;
         if (!creep.memory.resourceType) creep.memory.resourceType = null;
+        if (creep.memory.justRetreated) {
+            delete creep.memory.justRetreated; // Сбрасываем после одного тика
+        }
 
         const targetRoom = creep.memory.targetRoom;
         const room = Game.rooms[targetRoom];
+
+        // Проверка: если рядом со спавном — срочно уходим
+        const spawns = room ? room.find(FIND_MY_SPAWNS) : [];
+        const isNearSpawn = spawns.some(spawn => 
+            creep.pos.isEqualTo(spawn.pos) || creep.pos.inRangeTo(spawn.pos, 1)
+        );
+
+        if (isNearSpawn && !creep.memory.justRetreated && room && room.controller) {
+            let validPos = null;
+
+            // Пытаемся найти точку около контроллера (радиус 5–10 клеток)
+            for (let i = 0; i < 10; i++) {
+                const radius = _.random(5, 10);
+                const angle = _.random() * Math.PI * 2;
+                const x = Math.round(room.controller.pos.x + radius * Math.cos(angle));
+                const y = Math.round(room.controller.pos.y + radius * Math.sin(angle));
+
+
+                if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+
+                const pos = new RoomPosition(x, y, targetRoom);
+
+                const terrain = room.lookForAt(LOOK_TERRAIN, x, y)[0].terrain;
+                if (terrain !== 'plain') continue;
+
+                // Проверяем удалённость от спавнов (минимум 3 клетки)
+                const tooClose = spawns.some(spawn => pos.inRangeTo(spawn.pos, 3));
+                if (tooClose) continue;
+
+                validPos = pos;
+                break;
+            }
+
+            if (validPos) {
+                creep.moveTo(validPos, {
+                    visualizePathStyle: { stroke: '#ff6600' },
+                    range: 1
+                });
+                creep.say('➡️ LEAVE SPAWN');
+                creep.memory.justRetreated = true;
+                return;
+            } else {
+                // Аварийный отступ: ищем точку в радиусе 3–5 клеток
+                const possibleMoves = [];
+                for (let r = 3; r <= 5; r++) {
+                    for (let angle = 0; angle < 360; angle += 45) {
+                        const x = Math.round(creep.pos.x + r * Math.cos(angle * Math.PI / 180));
+                        const y = Math.round(creep.pos.y + r * Math.sin(angle * Math.PI / 180));
+
+                        if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+
+                        const pos = new RoomPosition(x, y, targetRoom);
+                        const terrain = room.lookForAt(LOOK_TERRAIN, x, y)[0].terrain;
+                        if (terrain === 'wall') continue;
+
+                        // Проверяем удалённость от спавнов
+                        const tooClose = spawns.some(spawn => pos.inRangeTo(spawn.pos, 3));
+                        if (tooClose) continue;
+
+                        possibleMoves.push(pos);
+                    }
+                }
+
+                if (possibleMoves.length > 0) {
+                    const targetPos = _.sample(possibleMoves);
+                    creep.moveTo(targetPos, {
+                        visualizePathStyle: { stroke: '#ff6600' },
+                        range: 1
+                    });
+                    creep.say('➡️ FORCED RETREAT');
+                    creep.memory.justRetreated = true;
+                    return;
+                }
+            }
+        }
+
+        // 2. Валидация состояния и авто-возврат при низком HP
+        baseRole.validateState(creep, ['collecting', 'delivering'], 'collecting');
+        if (baseRole.checkHealth(creep)) {
+            baseRole.returnHome(creep, creep.memory.homeRoom);
+            return;
+        }
+        if (baseRole.handleReturningHome(creep)) return;
 
         if (!room || !room.storage) {
             creep.say('🚫 no storage');
             return;
         }
 
-        // 2. Принудительная доставка при малом времени жизни
+        // 3. Принудительная доставка при малом времени жизни
         if (creep.ticksToLive < 50 && creep.store.getUsedCapacity() > 0) {
             creep.memory.state = 'delivering';
             creep.memory.targetId = null;
             creep.memory.resourceType = null;
-            console.log(`${creep.name}: Принудительная доставка (осталось ${creep.ticksToLive} тиков)`);
+            console.log(`${creep.name}: Принудительная доставка (осталось ${creep.ticksToLive} тиков}`);
         }
 
-        // 3. Переключение состояний
+        // 4. Переключение состояний
         if (creep.memory.state === 'collecting' && creep.store.getFreeCapacity() === 0) {
             creep.memory.state = 'delivering';
         } else if (creep.memory.state === 'delivering' && creep.store.getUsedCapacity() === 0) {
@@ -32,7 +119,7 @@ module.exports = {
             creep.memory.resourceType = null;
         }
 
-        // 4. Режим: Сбор ресурсов
+        // 5. Режим: Сбор ресурсов
         if (creep.memory.state === 'collecting') {
             if (!creep.memory.targetId || !creep.memory.resourceType) {
                 const containers = room.find(FIND_STRUCTURES, {

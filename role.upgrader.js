@@ -1,12 +1,31 @@
 const sourcesModule = require('./utils'); // Ваш модуль поиска источников
+const baseRole = require('./role.base');
 const constants = require('./config.constants');
 const myRooms = constants.ROOMS;
 
 module.exports = {
     run: (creep) => {
-        if (!creep.memory.state) {
-            creep.memory.state = 'harvesting';
-        }
+        // Валидация состояния (защита от опечаток)
+            // Валидация состояния (защита от опечаток)
+            baseRole.validateState(creep, ['harvesting', 'upgrading'], 'harvesting');
+
+            // Авто-возврат при низком HP
+            if (baseRole.checkHealth(creep)) {
+                baseRole.returnHome(creep, creep.memory.homeRoom);
+                return;
+            }
+
+            if (baseRole.handleReturningHome(creep)) {
+                return;
+            }
+
+            // Защита от застревания на границе комнаты
+            const { x, y } = creep.pos;
+            if (x === 0 || x === 49 || y === 0 || y === 49) {
+                const centerPos = new RoomPosition(25, 25, creep.room.name);
+                creep.moveTo(centerPos, { maxRooms: 1, reusePath: 5, visualizePathStyle: { stroke: '#ffff00' } });
+                return;
+            }
         
         if (!creep.memory.homeRoom) {
             creep.memory.homeRoom = creep.room.name; // ваша основная комната
@@ -28,10 +47,8 @@ module.exports = {
         // Выполнение действий в зависимости от состояния
         if (state == 'upgrading') {
             if (creep.store.getUsedCapacity() > 0 && creep.room.name !== creep.memory.homeRoom) {
-                // Возвращаемся домой
-                const homePos = new RoomPosition(25, 25, creep.memory.homeRoom);
-                creep.moveTo(homePos, {visualizePathStyle: {stroke: '#ffffff'}});
-                return;
+                // Возвращаемся домой безопасно через baseRole
+                if (!baseRole.moveToRoom(creep, creep.memory.homeRoom)) return;
             }
             if (creep.upgradeController(creep.room.controller) == ERR_NOT_IN_RANGE) {
                 creep.moveTo(creep.room.controller);
@@ -41,7 +58,7 @@ module.exports = {
 
             // 1. Ищем контейнер с энергией
             const freeCap = creep.store.getFreeCapacity();
-            const container = sourcesModule.findContainerWithEnergy(creep, freeCap);
+            const container = baseRole.findContainerWithEnergyFromMemory(creep, Math.max(150, freeCap));
             if (container) {
                 // 2. Если есть контейнер, добываем из него
                 if (creep.withdraw(container, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
@@ -51,37 +68,22 @@ module.exports = {
             }
 
             // 2. Ищем хранилище (Storage) с ≥5000 ед. энергии
-            const storages = creep.room.find(FIND_MY_STRUCTURES, {
-                filter: (structure) =>
-                    structure.structureType === STRUCTURE_STORAGE &&
-                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 30000
-            });
-
-            if (storages.length > 0) {
-                // Сортируем по расстоянию
-                const closestStorage = storages.sort((a, b) =>
-                    creep.pos.getRangeTo(a) - creep.pos.getRangeTo(b)
-                ).find(storage => creep.pos.getRangeTo(storage) <= 2);
-
-
-                if (closestStorage) {
-                    const withdrawResult = creep.withdraw(closestStorage, RESOURCE_ENERGY);
-                    if (withdrawResult === OK) {
-                        creep.memory.waitStartTick = null;
-                        return;
-                    }
+            // Используем Memory.rooms для поиска подходящего Storage
+            const closestStorage = baseRole.findStorageWithEnergyFromMemory(creep, 30000);
+            if (closestStorage) {
+                const withdrawResult = creep.withdraw(closestStorage, RESOURCE_ENERGY);
+                if (withdrawResult === OK) {
+                    creep.memory.waitStartTick = null;
+                    return;
                 }
-
-                // Если нет близко — идём к самому близкому
-                const storage = creep.pos.findClosestByPath(storages);
-                if (storage) {
-                    creep.moveTo(storage, { visualizePathStyle: { stroke: '#ff5500' } }); // Оранжевый цвет пути
+                if (withdrawResult === ERR_NOT_IN_RANGE) {
+                    creep.moveTo(closestStorage, { visualizePathStyle: { stroke: '#ff5500' } });
                     return;
                 }
             }
 
-            // 3. Если контейнера нет, ищем источник энергии
-            const source = sourcesModule.findAvailableSource(creep);
+            // 3. Если контейнера нет, ищем источник энергии (по Memory)
+            const source = baseRole.findAvailableSourceFromMemory(creep);
             if (source) {
                 if (creep.harvest(source) == ERR_NOT_IN_RANGE) {
                     creep.moveTo(source, {visualizePathStyle: {stroke: '#ffaa00'}});

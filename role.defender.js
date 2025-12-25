@@ -11,10 +11,8 @@ module.exports = {
             creep.memory.attackCooldown = 2;
         }
 
-        // ➔ Инициализация целевой комнаты (если не задана)
+        // ➔ Инициализация целевой комнаты
         if (!creep.memory.targetRoom) {
-            // Здесь должна быть ваша логика выбора целевой комнаты
-            // Пример: берем из конфигурации или фиксированное значение
             creep.memory.targetRoom = constants.DEFAULT_DEFEND_ROOM; // замените на вашу логику
         }
 
@@ -23,15 +21,14 @@ module.exports = {
         // ➔ Если не в целевой комнате — переходим туда
         if (roomName !== creep.memory.targetRoom) {
             const targetPos = new RoomPosition(25, 25, creep.memory.targetRoom);
-            
             if (creep.moveTo(targetPos, {
-                visualizePathStyle: { stroke: '#ffff00' }, // жёлтый путь для перехода
+                visualizePathStyle: { stroke: '#ffff00' },
                 maxRooms: 10,
                 reusePath: 5
             }) !== OK) {
                 console.log(`${creep.name}: Не могу двигаться в ${creep.memory.targetRoom}`);
             }
-            return; // ждём прибытия
+            return;
         }
 
         // 1. Поиск Invader Core (приоритет №1)
@@ -59,22 +56,15 @@ module.exports = {
         });
 
         let enemies = [...hostileCreeps, ...hostileStructures];
-
-        // Фильтруем только существующие объекты
         enemies = enemies.filter(e => e !== null);
 
-        // Сортируем врагов по приоритету (например, по наличию heal-частей)
-        const sortedEnemies = enemies.length > 0
-            ? sourcesModule.sortEnemiesByHealParts(enemies)
-            : [];
+        // 🔁 Сортируем врагов по приоритету
+        const sortedEnemies = sourcesModule.sortEnemiesByPriority(enemies);
         const targetEnemy = sortedEnemies.length > 0 ? sortedEnemies[0] : null;
 
-
-        // 3. Логика переключения режимов (без изменений)
+        // 3. Логика переключения режимов
         const enemiesNear = enemies.length > 0;
-        const hostileStructuresNear = creep.room.find(FIND_STRUCTURES, {
-            filter: s => (s.owner && !s.my) && s.structureType !== STRUCTURE_ROAD
-        }).length > 0;
+        const hostileStructuresNear = hostileStructures.length > 0;
 
         if (enemiesNear || hostileStructuresNear) {
             if (creep.memory.state !== 'attack') {
@@ -93,7 +83,7 @@ module.exports = {
             }
         }
 
-        // 4. Режим атаки (без изменений)
+        // 4. Режим атаки
         if (creep.memory.state === 'attack') {
             if (targetEnemy) {
                 if (creep.attack(targetEnemy) === ERR_NOT_IN_RANGE) {
@@ -105,11 +95,9 @@ module.exports = {
                 return;
             }
 
-            const allHostileStructures = creep.room.find(FIND_STRUCTURES, {
-                filter: s => s.owner && !s.my && s.structureType !== STRUCTURE_ROAD
-            });
-            if (allHostileStructures.length > 0) {
-                const target = creep.pos.findClosestByRange(allHostileStructures);
+            // Если нет крипов — атакуем структуры
+            if (hostileStructures.length > 0) {
+                const target = creep.pos.findClosestByRange(hostileStructures);
                 if (creep.attack(target) === ERR_NOT_IN_RANGE) {
                     creep.moveTo(target, {
                         visualizePathStyle: { stroke: '#ff0000' },
@@ -120,188 +108,122 @@ module.exports = {
             }
         }
 
-        // 5. Режим патрулирования (без изменений)
+        // 5. Режим патрулирования
         if (creep.memory.state === 'patrol') {
             const controller = creep.room.controller;
-            if (!controller) return;
-
-            if (!creep.memory.patrolTarget) {
-                creep.memory.patrolTarget = null;
-            }
-            if (!creep.memory.patrolTick) {
-                creep.memory.patrolTick = 0;
+            if (!controller) {
+                console.log(`${creep.name}: Нет контроллера в комнате. Переход в ожидание.`);
+                return;
             }
 
-            if (creep.memory.patrolTick % 5 === 0 || !creep.memory.patrolTarget) {
-                const radius = 5;
+            // Инициализация памяти
+            if (!creep.memory.patrolTarget) creep.memory.patrolTarget = null;
+            if (!creep.memory.patrolTick) creep.memory.patrolTick = 0;
+
+            // Перегенерация цели каждые 5 тиков ИЛИ если цель невалидна
+            const needNewTarget = (
+                creep.memory.patrolTick % 5 === 0 ||
+                !creep.memory.patrolTarget ||
+                typeof creep.memory.patrolTarget.x !== 'number' ||
+                typeof creep.memory.patrolTarget.y !== 'number'
+            );
+
+            if (needNewTarget) {
+                const minDistance = 7;
+                const maxDistance = 12;
                 let targetX, targetY, valid = false;
 
-                for (let attempt = 0; attempt < 10; attempt++) {
-                    targetX = controller.pos.x + _.random(-radius, radius);
-                    targetY = controller.pos.y + _.random(-radius, radius);
+                // 1. Поиск точки в кольце вокруг контроллера
+                for (let attempt = 0; attempt < 20; attempt++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = minDistance + Math.random() * (maxDistance - minDistance);
+                    targetX = Math.round(controller.pos.x + radius * Math.cos(angle));
+                    targetY = Math.round(controller.pos.y + radius * Math.sin(angle));
 
-                    if (targetX >= 1 && targetX <= 48 &&
-                        targetY >= 1 && targetY <= 48) {
-                        const terrain = creep.room.lookForAt(LOOK_TERRAIN, targetX, targetY)[0].terrain;
-                        if (terrain === 'plain') {
+
+                    // Проверка границ карты
+                    if (targetX < 1 || targetX > 48 || targetY < 1 || targetY > 48) continue;
+
+                    // Проверка местности
+                    const terrain = creep.room.lookForAt(LOOK_TERRAIN, targetX, targetY)[0].terrain;
+                    if (terrain !== 'plain') continue;
+
+                    // Проверка расстояния до контроллера
+                    const dx = targetX - controller.pos.x;
+                    const dy = targetY - controller.pos.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < minDistance || distance > maxDistance) continue;
+
+                    // Проверка удалённости от спавнов
+                    const spawns = creep.room.find(FIND_MY_SPAWNS);
+                    const tooClose = spawns.some(spawn => creep.pos.inRangeTo(spawn.pos, 4));
+                    if (tooClose) continue;
+
+                    valid = true;
+                    break;
+                }
+
+                // 2. Если не нашли точку в кольце — ищем альтернативную рядом с крипом
+                if (!valid) {
+                    for (let r = 5; r <= 7; r++) {
+                        for (let angle = 0; angle < 360; angle += 30) {
+                            const x = Math.round(creep.pos.x + r * Math.cos(angle * Math.PI / 180));
+                            const y = Math.round(creep.pos.y + r * Math.sin(angle * Math.PI / 180));
+
+
+                            if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+                            const terrain = creep.room.lookForAt(LOOK_TERRAIN, x, y)[0].terrain;
+                            if (terrain !== 'plain') continue;
+
+                            const spawns = creep.room.find(FIND_MY_SPAWNS);
+                            const tooClose = spawns.some(spawn => creep.pos.inRangeTo(spawn.pos, 4));
+                            if (tooClose) continue;
+
+                            creep.memory.patrolTarget = { x, y };
                             valid = true;
                             break;
                         }
+                        if (valid) break;
                     }
                 }
 
-                if (valid) {
-                    creep.memory.patrolTarget = { x: targetX, y: targetY };
-                } else {
+                // 3. Если всё равно не нашли — используем жёстко заданную точку у контроллера
+                if (!valid) {
                     creep.memory.patrolTarget = {
-                        x: controller.pos.x,
-                        y: controller.pos.y
+                        x: Math.max(1, Math.min(48, controller.pos.x + 7)),
+                        y: Math.max(1, Math.min(48, controller.pos.y))
                     };
+                    console.log(`${creep.name}: Использована запасная патрульная точка: (${creep.memory.patrolTarget.x}, ${creep.memory.patrolTarget.y})`);
                 }
             }
 
+            // ФИНАЛЬНАЯ ПРОВЕРКА: убеждаемся, что точка валидна
             const target = creep.memory.patrolTarget;
-            const targetPos = new RoomPosition(target.x, target.y, creep.room.name);
+            if (!target || typeof target.x !== 'number' || typeof target.y !== 'number') {
+                console.error(`${creep.name}: Критическая ошибка: patrolTarget невалиден:`, target);
+                creep.memory.patrolTarget = null; // Сброс для перегенерации
+                return;
+            }
 
+            // Создаём RoomPosition ТОЛЬКО после полной валидации
+            const targetPos = new RoomPosition(
+                Math.round(target.x),
+                Math.round(target.y),
+                creep.room.name
+            );
+
+            // Двигаемся к цели
             if (!creep.pos.isEqualTo(targetPos)) {
                 creep.moveTo(targetPos, {
                     visualizePathStyle: { stroke: '#00ff00' },
                     maxRooms: 1,
-                    reusePath: 3
+                    reusePath: 3,
+                    range: 1
                 });
             }
 
             creep.memory.patrolTick++;
         }
+
     }
 };
-
-
-
-// module.exports = {
-//     run: (creep) => {
-//         // Инициализация (как было)
-//         if (!creep.memory.state) {
-//             creep.memory.state = 'patrol';
-//         }
-
-//                 const targetPoints = [
-//                     { x: 20, y: 20, roomName: creep.memory.targetRoom },
-//                     { x: 20, y: 30, roomName: creep.memory.targetRoom },
-//                     { x: 30, y: 30, roomName: creep.memory.targetRoom },
-//                     { x: 30, y: 20, roomName: creep.memory.targetRoom }
-//                 ];
-// //         if (!creep.memory.routePoints || creep.memory.routePoints.length === 0) {
-//             creep.memory.routePoints = targetPoints;
-//         }
-
-//         if (creep.memory.attackCooldown === undefined) {
-//             creep.memory.attackCooldown = 2;
-//         }
-
-//         // Получаем врагов из памяти
-//         const roomName = creep.room.name;
-//         const enemyIds = (Memory.rooms[roomName].enemies) || [];
-//         const enemies = enemyIds
-//             .map(id => Game.getObjectById(id))
-//             .filter(e => e !== null);
-
-//         // Сортируем врагов
-//         const sortedEnemies = enemies.length > 0 
-//             ? sourcesModule.sortEnemiesByHealParts(enemies)
-//             : [];
-//         const targetEnemy = sortedEnemies.length > 0 ? sortedEnemies[0] : null;
-
-//         // Проверяем наличие угроз
-//         const hasEnemies = enemies.length > 0;
-//         const hasHostileStructures = creep.room.find(FIND_STRUCTURES, {
-//             filter: s => s.structureType === STRUCTURE_INVADER_CORE || (s.owner && !s.my)
-//         }).length > 0;
-
-//         // Переключаем состояние
-//         if (hasEnemies || hasHostileStructures) {
-//             if (creep.memory.state !== 'attack') {
-//                 creep.memory.state = 'attack';
-//                 creep.say('⚔ ATTACK');
-//                 console.log(`${creep.name} switches to attack mode`);
-//             }
-//             creep.memory.attackCooldown = 5;
-//         } else {
-//             if (creep.memory.attackCooldown > 0) {
-//                 creep.memory.attackCooldown--;
-//             } else if (creep.memory.state !== 'patrol') {
-//                 creep.memory.state = 'patrol';
-//                 creep.say('🛡️ PATROL');
-//                 console.log(`${creep.name} switches to patrol mode`);
-//             }
-//         }
-
-//         // Режим атаки — выполняем первым и прерываем выполнение
-//         if (creep.memory.state === 'attack') {
-//             // 1. Атакуем врага
-//             if (targetEnemy) {
-//                 const attackResult = creep.attack(targetEnemy);
-//                 if (attackResult === ERR_NOT_IN_RANGE) {
-//                     creep.moveTo(targetEnemy, {
-//                         visualizePathStyle: { stroke: '#ff0000' },
-//                         maxOps: 50
-//                     });
-//                 }
-//                 return; // Прерываем выполнение — не идём в patrol
-//             }
-
-//             // 2. Атакуем Invader Core
-//             const invaderCore = creep.room.find(FIND_STRUCTURES, {
-//                 filter: s => s.structureType === STRUCTURE_INVADER_CORE
-//             })[0];
-//             if (invaderCore) {
-//                 const attackResult = creep.attack(invaderCore);
-//                 if (attackResult === ERR_NOT_IN_RANGE) {
-//                     creep.moveTo(invaderCore, {
-//                         visualizePathStyle: { stroke: '#ff4500' },
-//                         maxOps: 50
-//                     });
-//                 }
-//                 return; // Прерываем выполнение
-//             }
-
-//             // 3. Атакуем другие враждебные структуры
-//             const hostileStructures = creep.room.find(FIND_STRUCTURES, {
-//                 filter: s => s.owner && !s.my
-//             });
-//             if (hostileStructures.length > 0) {
-//                 const target = creep.pos.findClosestByRange(hostileStructures);
-//                 const attackResult = creep.attack(target);
-//                 if (attackResult === ERR_NOT_IN_RANGE) {
-//                     creep.moveTo(target, {
-//                         visualizePathStyle: { stroke: '#ff6347' },
-//                         maxOps: 50
-//                     });
-//                 }
-//                 return; // Прерываем выполнение
-//             }
-//         }
-
-//         // Режим патрулирования — выполняется только если не в атаке
-//         if (creep.memory.state === 'patrol') {
-//             const routePoints = creep.memory.routePoints;
-//             if (routePoints.length === 0) return;
-
-//             if (creep.memory.routeIndex === undefined) {
-//                 creep.memory.routeIndex = 0;
-//             }
-
-//             const targetPos = routePoints[creep.memory.routeIndex];
-//             const targetPosObj = new RoomPosition(targetPos.x, targetPos.y, targetPos.roomName);
-
-//             if (creep.pos.isEqualTo(targetPosObj)) {
-//                 creep.memory.routeIndex = (creep.memory.routeIndex + 1) % routePoints.length;
-//             } else {
-//                 creep.moveTo(targetPosObj, {
-//                     visualizePathStyle: { stroke: '#00ff00' },
-//                     maxOps: 50
-//                 });
-//             }
-//         }
-//     }
-// }

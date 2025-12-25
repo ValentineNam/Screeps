@@ -6,13 +6,14 @@ const roles = {
     defender: require('./role.defender'),
     harvester: require('./role.harvester'),
     remoteHarvester: require('./role.remoteHarvester'),
-    // healer: require('./role.healer'),
+    healer: require('./role.healer'),
+    guardian: require('./role.guardian'),
     miner: require('./role.miner'),
-    // scout: require('./role.scout'),
     towerman: require('./role.towerman'),
     upgrader: require('./role.upgrader'),
     scout: require('./role.scout'),
     logist: require('./role.logist'),
+    distributor: require('./role.distributor'),
 
     // squad_tank: require('./role.squadTank'),
     // squad_damager: require('./role.squadDamager'),
@@ -31,45 +32,79 @@ const state = require('./state');
 
 const roomDataService = require('./service.roomDataService');
 const statsService = require('./service.statsService');
+const chemistryManager = require('./service.chemistryManager');
 
 module.exports.loop = () => {
     const spawns = Object.values(Game.spawns);
 
     // 1. Инициализация памяти
-    if (!Memory.rooms) Memory.rooms = {};
+    // Если Memory.rooms — не определён или является массивом (оставшийся от старых версий),
+    // приводим его к объекту, чтобы использовать как map roomName -> data
+    if (!Memory.rooms || Array.isArray(Memory.rooms)) Memory.rooms = {};
     if (!Memory.baseStates) Memory.baseStates = {};
 
-    // 2. Обновляем данные по комнатам (раз в 5 тиков)
-    for (const roomName in Game.rooms) {
-        roomDataService.updateRoomData(roomName, 5);
+    // 2. Обновляем данные по комнатам (раз в ~N тиков) — распределяем обновления по тикам,
+    // чтобы не обновлять все комнаты одновременно и не создавать пиковой нагрузки на CPU.
+    const roomNames = Object.keys(Game.rooms);
+    if (roomNames.length > 0) {
+        // Обновляем одну комнату за тик; с N комнатами каждая будет обновляться каждые N тиков.
+        const roomToUpdate = roomNames[Game.time % roomNames.length];
+        roomDataService.updateRoomData(roomToUpdate, 5);
+        // Запускаем менеджер химии для этой комнаты (асинхронно: по одной комнате за тик)
+        try { chemistryManager.run(roomToUpdate); } catch (e) { /* ignore */ }
+        
+        // Additional chemistry management tasks
+        try {
+            chemistryManager.handleLabTransfers(roomToUpdate);
+            chemistryManager.processReadyReactions(roomToUpdate);
+        } catch (e) { /* ignore */ }
     }
 
-    // 3. Анализируем состояние каждой комнаты и сохраняем в state
-    for (const roomName in Game.rooms) {
-        const room = Game.rooms[roomName];
-        const roomData = Memory.rooms[roomName] || {};
-        const stats = roomData.stats || {};
+    // Глобальное распределение терминалов — запускаем раз в 20 тиков
+    if (Game.time % 20 === 0) {
+        try {
+            chemistryManager.distributeTerminals();
+            chemistryManager.scheduleProductionFromTargets(); // Schedule production based on target stocks
+        } catch (e) { /* ignore */ }
+    }
 
-        // Формируем новое состояние
-        const newState = {
-            stage: stats.stage || 'Unknown',
-            controllerLevel: (room.controller && room.controller.level) || 0,
-            hasEnemies: (roomData.enemies || []).length > 0,
-            enemyCount: (roomData.enemies || []).length,
-            totalEnergy: stats.totalEnergy || 0,
-            sourceCount: stats.sourceCount || 0,
-            containerCount: stats.containerCount || 0,
-            towerCount: stats.towerCount || 0,
-            isUnderAttack: (roomData.enemies || []).length >= 3,
-            needsDefense: (roomData.enemies || []).length > 0 && stats.towerCount === 0,
-            lastChecked: Game.time
-        };
+    // 3. Анализируем состояние комнат и сохраняем в state
+    // Распределяем обновления по тикам, чтобы избежать пиковой нагрузки
+    if (roomNames.length > 0) {
+        // Обновляем только часть комнат за тик, распределяя по циклу
+        // Каждые 5 тиков каждая комната будет обновлена (если комнат <= 5)
+        // Если комнат больше 5, то каждая комната будет обновляться раз в Math.ceil(rooms/5) тиков
+        const roomsPerTick = Math.max(1, Math.floor(roomNames.length / 5)); // максимум 5 комнат за тик
+        const startIdx = (Game.time % 5) * roomsPerTick;
+        const endIdx = Math.min(startIdx + roomsPerTick, roomNames.length);
+        
+        for (let i = startIdx; i < endIdx; i++) {
+            const roomName = roomNames[i];
+            const room = Game.rooms[roomName];
+            const roomData = Memory.rooms[roomName] || {};
+            const stats = roomData.stats || {};
 
-        // Сохраняем состояние через ваш state-модуль
-        state.setState(roomName, newState, {
-            updatedAt: Game.time,
-            roomName: roomName
-        });
+            // Формируем новое состояние
+            const newState = {
+                stage: stats.stage || 'Unknown',
+                controllerLevel: (room.controller && room.controller.level) || 0,
+                hasEnemies: (roomData.enemies || []).length > 0,
+                enemyCount: (roomData.enemies || []).length,
+                totalEnergy: stats.totalEnergy || 0,
+                sourceCount: stats.sourceCount || 0,
+                containerCount: stats.containerCount || 0,
+                towerCount: stats.towerCount || 0,
+                isUnderAttack: (roomData.enemies || []).length >= 3,
+                needsDefense: (roomData.enemies || []).length > 0 && stats.towerCount === 0,
+                lastChecked: Game.time
+            };
+
+            // Сохраняем состояние через ваш state-модуль
+            state.setState(roomName, newState, {
+                updatedAt: Game.time,
+                roomName: roomName
+            });
+        }
     }
 
     // 4. Управление спавнами
@@ -116,25 +151,3 @@ module.exports.loop = () => {
 //     stats: { ... },         // вычисленные метрики (stage, энергия и т.п.)
 //     lastUpdated: Game.time     // метка времени для инвалидации
 // };
-
-
-// ToDo: вынести операции с памятью в отдельный модуль - создать api для взаимодействия с памятью:
-// поиск, добавление, удаление, очистка
-// ToDo: вынести обработку текущего нахождения крипов по комнатам -> особенно важны скауты
-// Каждая занятая своими объектами и/или крипами комната описывается на содержимое:
-// крипы, здания, ресурсы (плюс свободные места возле), стройплощадки, враги, вражеские здания
-// далее, все это заносится в память и крипы, вместо того, чтоы каждый раз обращаться к объектукарты
-// будут обращаться к объекту памяти (например, в случае с поиском ближайшего врага или ресурса)
-// это нужно, чтобы минимизировать цп нагрузку
-// ToDo: создать систему задач, основанную на разведке и доступных данных
-// Задачи тоже хранить в памяти, но также иметь задачи, которые создаются поьзователем
-// ToDo: разобраться с системой стейтов (в осаде и тп). Проработать ситему заданий на разные кейсы
-// ToDo: реализовать добычу и передачу ресурсов в соседних комнатах.
-// ToDo: реализовать автоматическое разорение гнезд вторженцев в соседних с занятыми комнатах.
-// ToDo: реализовать систему автоматической добычи ресурсов, отличных от энергии
-// ToDo: на каждую комнату, где будет производится добыча создать стратегию (на 1 ресурс: 1 майнер, 1 коробка, 1 строитель для починки)
-// Inscreasing the reusePath option in the Creep.moveTo method helps saving CPU.
-// TIP OF THE DAY: A creep can execute some commands simultaneously in one tick, for example move+build+dropEnergy
-// Creep.reserveController
-// Spawn.renewCreep
-//  Inscreasing the reusePath option in the Creep.moveTo method helps saving CPU.

@@ -4,7 +4,7 @@ const myRooms = constants.ROOMS;
 
 module.exports = {
     run: (creep) => {
-        // 1. Инициализация памяти (все необходимые флаги)
+        // 1. Инициализация памяти (единый блок)
         if (!creep.memory.homeRoom) creep.memory.homeRoom = myRooms[0];
         if (!creep.memory.targetRoom) creep.memory.targetRoom = creep.room.name;
         if (!creep.memory.state) creep.memory.state = 'harvesting';
@@ -14,26 +14,25 @@ module.exports = {
         const targetRoom = creep.memory.targetRoom;
         const homeRoom = creep.memory.homeRoom;
 
-        // 2. Проверка доступности целевой комнаты (актуальный API)
+        // 2. Проверка доступности целевой комнаты
         const roomStatus = Game.map.getRoomStatus(targetRoom);
         if (roomStatus.status !== 'normal') {
             console.log(`${creep.name}: Целевая комната ${targetRoom} недоступна (статус: ${roomStatus.status})`);
-            // Если мы в целевой комнате, но она стала недоступна — начинаем возврат
-            if (creep.room.name === targetRoom) {
-                creep.memory.returningHome = true;
-            }
+            creep.memory.returningHome = true;
+            creep.memory.enteredTargetRoom = false;
+            return;
         }
 
         // 3. Переключение состояний
         if (creep.memory.state === 'harvesting' && creep.store.getFreeCapacity() === 0) {
             creep.memory.state = 'delivering';
             creep.memory.returningHome = false;
-            creep.memory.enteredTargetRoom = false; // Сброс при начале доставки
+            creep.memory.enteredTargetRoom = false;
         } else if (creep.memory.state === 'delivering' && creep.store[RESOURCE_ENERGY] === 0) {
             creep.memory.state = 'harvesting';
         }
 
-        // 4. Защита от застревания на границе комнаты
+        // 4. Защита от застревания на границе
         const { x, y } = creep.pos;
         if (x === 0 || x === 49 || y === 0 || y === 49) {
             const centerPos = new RoomPosition(25, 25, creep.room.name);
@@ -45,9 +44,9 @@ module.exports = {
             return;
         }
 
-        // 5. Режим: Добыча
+        // 5. Режим: Добыча (harvesting)
         if (creep.memory.state === 'harvesting') {
-            // 5.1. Вход в целевую комнату (только если ещё не вошли)
+            // 5.1. Вход в целевую комнату
             if (!creep.memory.enteredTargetRoom) {
                 if (creep.room.name !== targetRoom) {
                     const targetPos = new RoomPosition(25, 25, targetRoom);
@@ -63,38 +62,42 @@ module.exports = {
                     console.log(`${creep.name}: Вошёл в целевую комнату ${targetRoom}`);
                 }
             }
-            
-            // 2. Ищем хранилище (Storage) с ≥5000 ед. энергии
+
+            // 5.2. Поиск ресурсов (порядок приоритета: контейнер → хранилище → дроп → источник)
+            const freeCap = creep.store.getFreeCapacity();
+
+
+            // Контейнер с энергией
+            const container = sourcesModule.findContainerWithEnergy(creep, freeCap);
+            if (container) {
+                if (creep.withdraw(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                    creep.moveTo(container, { visualizePathStyle: { stroke: '#ffaa00' } });
+                }
+                return;
+            }
+
+            // Хранилище (≥3000 энергии)
             const storages = creep.room.find(FIND_MY_STRUCTURES, {
                 filter: (structure) =>
                     structure.structureType === STRUCTURE_STORAGE &&
-                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 5000
+                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 30000
             });
 
             if (storages.length > 0) {
-                // Сортируем по расстоянию
-                const closestStorage = storages.sort((a, b) =>
-                    creep.pos.getRangeTo(a) - creep.pos.getRangeTo(b)
-                ).find(storage => creep.pos.getRangeTo(storage) <= 2);
-
-
+                const closestStorage = creep.pos.findClosestByPath(storages);
                 if (closestStorage) {
                     const withdrawResult = creep.withdraw(closestStorage, RESOURCE_ENERGY);
                     if (withdrawResult === OK) {
                         creep.memory.waitStartTick = null;
                         return;
+                    } else if (withdrawResult === ERR_NOT_IN_RANGE) {
+                        creep.moveTo(closestStorage, { visualizePathStyle: { stroke: '#ff5500' } });
+                        return;
                     }
-                }
-
-                // Если нет близко — идём к самому близкому
-                const storage = creep.pos.findClosestByPath(storages);
-                if (storage) {
-                    creep.moveTo(storage, { visualizePathStyle: { stroke: '#ff5500' } }); // Оранжевый цвет пути
-                    return;
                 }
             }
 
-            // 5.2. Поиск и подбор dropped energy (в радиусе 10 клеток)
+            // Дроп энергии (в радиусе 10 клеток)
             const droppedEnergy = creep.pos.findInRange(FIND_DROPPED_RESOURCES, 10, {
                 filter: r => r.resourceType === RESOURCE_ENERGY && r.amount > 50
             });
@@ -110,9 +113,24 @@ module.exports = {
                 return;
             }
 
-            // 5.3. Поиск источника
-            let source = null;
-            if (!creep.memory.sourceId) {
+            // Источник энергии
+            let source = Game.getObjectById(creep.memory.sourceId);
+
+            // Проверяем, доступен ли запомненный источник
+            if (source) {
+                // Проверяем, можно ли встать рядом с источником (нет ли других крипов)
+                const creepsOnTile = creep.room.lookForAt(LOOK_CREEPS, source.pos);
+                const isOccupied = creepsOnTile.some(c => c.id !== creep.id);
+
+                if (isOccupied) {
+                    console.log(`${creep.name}: Источник ${source.id} занят. Ищем альтернативу.`);
+                    delete creep.memory.sourceId;
+                    source = null;
+                }
+            }
+
+            // Если нет действующего источника — ищем новый
+            if (!source) {
                 source = sourcesModule.findAvailableSource(creep);
                 if (source) {
                     creep.memory.sourceId = source.id;
@@ -128,21 +146,18 @@ module.exports = {
                     return;
                 }
             }
-            source = Game.getObjectById(creep.memory.sourceId);
-            if (source) {
-                const harvestResult = creep.harvest(source);
-                if (harvestResult === ERR_NOT_IN_RANGE) {
-                    creep.moveTo(source, {
-                        maxRooms: 1,
-                        reusePath: 5,
-                        visualizePathStyle: { stroke: '#ffaa00' }
-                    });
-                } else if (harvestResult !== OK) {
-                    console.log(`${creep.name}: Ошибка сбора: ${harvestResult}`);
-                    delete creep.memory.sourceId;
-                }
-            } else {
-                delete creep.memory.sourceId;
+
+            // Добываем
+            const harvestResult = creep.harvest(source);
+            if (harvestResult === ERR_NOT_IN_RANGE) {
+                creep.moveTo(source, {
+                    maxRooms: 1,
+                    reusePath: 5,
+                    visualizePathStyle: { stroke: '#ffaa00' }
+                });
+            } else if (harvestResult !== OK) {
+                console.log(`${creep.name}: Ошибка сбора: ${harvestResult}`);
+                delete creep.memory.sourceId;  // сбрасываем, чтобы на следующем тике искать новый
             }
         }
 

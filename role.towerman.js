@@ -21,7 +21,7 @@ module.exports = {
                 filter: (structure) =>
                     structure.structureType === STRUCTURE_CONTAINER &&
                     structure.store.getUsedCapacity(RESOURCE_ENERGY) > 0 &&
-                    (structure.store.getUsedCapacity(RESOURCE_ENERGY) / structure.store.getCapacity()) >= 0.7
+                    (structure.store.getUsedCapacity(RESOURCE_ENERGY) / structure.store.getCapacity()) >= 0.5
             });
 
             if (nearbyContainers.length > 0) {
@@ -48,7 +48,7 @@ module.exports = {
             const storages = creep.room.find(FIND_MY_STRUCTURES, {
                 filter: (structure) =>
                     structure.structureType === STRUCTURE_STORAGE &&
-                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 5000
+                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 29000
             });
 
             if (storages.length > 0) {
@@ -144,15 +144,51 @@ module.exports = {
                 }
             }
         } else if (creep.memory.state === 'delivering') {
-            // Используем функцию поиска целей с приоритетами
-            const target = sourcesModule.findTowers(creep);
-            if (target) {
-                if (creep.transfer(target, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
-                    creep.moveTo(target, {visualizePathStyle: {stroke: '#ffffff'}});
+            // 1. Находим все башни в комнате
+            const towers = creep.room.find(FIND_MY_STRUCTURES, {
+                filter: (structure) =>
+                    structure.structureType === STRUCTURE_TOWER &&
+                    structure.energy < structure.energyCapacity // башня не полна
+            });
+
+            if (towers.length === 0) {
+                // Все башни полны — ищем Storage/Container для разгрузки
+                const storage = creep.pos.findClosestByPath(FIND_MY_STRUCTURES, {
+                    filter: (s) =>
+                        (s.structureType === STRUCTURE_STORAGE || s.structureType === STRUCTURE_CONTAINER) &&
+                        s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+                });
+
+                if (storage) {
+                    if (creep.transfer(storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                        creep.moveTo(storage, { visualizePathStyle: { stroke: '#ffffff' } });
+                    }
+                    return;
+                }
+
+                // Если некуда разгрузиться — ждём
+                creep.say('🛑 full');
+                return;
+            }
+
+            // 2. Выбираем башню с минимальным заполнением (по абсолютной величине)
+            // Альтернатива: по доле заполнения (structure.energy / structure.energyCapacity)
+            const targetTower = towers.reduce((minTower, currentTower) => {
+                return (currentTower.energy < minTower.energy) ? currentTower : minTower;
+            });
+
+            // 3. Доставляем энергию
+            if (creep.pos.isNearTo(targetTower)) {
+                const transferResult = creep.transfer(targetTower, RESOURCE_ENERGY);
+                if (transferResult === OK) {
+                    console.log(`${creep.name}: Энергия доставлена в башню ${targetTower.id}`);
+                } else {
+                    console.log(`${creep.name}: Ошибка передачи в башню: ${transferResult}`);
                 }
             } else {
-                // Нет целей для сдачи
+                creep.moveTo(targetTower, { visualizePathStyle: { stroke: '#00ff00' } }); // Зелёный путь к башне
             }
         }
+
     }
 };

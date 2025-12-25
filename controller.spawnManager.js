@@ -280,114 +280,192 @@ function selectTargetRoom(homeRoom, role) {
 
 const SPAWN_RULES = [
     // Локальные роли (работают в homeRoom)
-    { role: 'harvester', bodyRole: 'worker' },
-    { role: 'upgrader', bodyRole: 'worker' },
-    { role: 'builder', bodyRole: 'worker' },
-    { role: 'defender', bodyRole: 'defender' },
-    { role: 'claimer', bodyRole: 'claimer' },
-    { role: 'healer', bodyRole: 'healer' },
-    { role: 'towerman', bodyRole: 'worker' },
-    // { role: 'miner', bodyRole: 'miner' },
-    { role: 'crawler', bodyRole: 'logist' },
-    { role: 'scout', bodyRole: 'scout' },
-    // {
-    //     role: 'miner',
-    //     bodyRole: 'miner',
-    //     // isRemote: false (по умолчанию)
-    //     condition: (ctx) => {
-    //         const config = getRoomConfig(ctx.roomName);
-    //         if (!config) return false;
+    { role: 'harvester', bodyRole: 'worker', priority: 100 },
+    { role: 'upgrader', bodyRole: 'worker', priority: 96 },
+    { role: 'builder', bodyRole: 'worker', priority: 94  },
+    { role: 'defender', bodyRole: 'defender', priority: 70  },
+    { role: 'claimer', bodyRole: 'claimer', priority: 30  },
+    { role: 'healer', bodyRole: 'healer', priority: 50  },
+    { role: 'towerman', bodyRole: 'worker', priority: 60  },
+    { role: 'miner', bodyRole: 'miner', priority: 99  },
+    // { role: 'crawler', bodyRole: 'logist', priority: 40  },
+    { role: 'scout', bodyRole: 'scout', priority: 5  },
+    // 1. Майнеры для родной комнаты (homeRoom)
+    {
+        role: 'miner',
+        bodyRole: 'miner',
+        priority: 95,
+        condition: (ctx) => {
+            const config = getRoomConfig(ctx.roomName);
+            if (!config) return false;
 
-    //         // 1. Проверяем, что база обеспечена
-    //         if (!hasSufficientBaseCreeps(ctx.roomName)) return false;
+            if (!hasSufficientBaseCreeps(ctx.roomName)) return false;
 
-    //         // 2. Проверяем наличие контейнеров у источников в homeRoom
-    //         const localContainers = getSourceContainers(ctx.roomName);
-    //         if (localContainers.length === 0) return false;
-
-    //         // 3. Считаем текущих локальных miner-ов (homeRoom === targetRoom)
-    //         const currentLocalMiners = countCreepsByRole('miner', ctx.roomName, ctx.roomName);
-
-    //         // 4. Лимит из секции creeps конфигурации
-    //         const desiredLocalCount = config.creeps.miner || 0;
-
-    //         return (
-    //             currentLocalMiners < localContainers.length &&  // не больше контейнеров
-    //             currentLocalMiners < desiredLocalCount            // не больше желаемого
-    //         );
-    //     },
-    // },
+            // Целевая комната = homeRoom
+            const targetRoom = ctx.roomName;
 
 
+            // Проверяем контейнеры у источников в homeRoom
+            const sourceContainers = getSourceContainers(targetRoom);
+            if (sourceContainers.length === 0) return false;
+
+
+            // Считаем текущих майнеров для этой комнаты
+            const currentMiners = countCreepsByRole('miner', ctx.roomName, targetRoom);
+
+            const maxMiners = Math.min(
+                sourceContainers.length,
+                config.localCreeps.miner.count || 0
+            );
+
+            return currentMiners < maxMiners;
+        },
+        memory: (ctx) => ({
+            role: 'miner',
+            homeRoom: ctx.roomName,
+            targetRoom: ctx.roomName, // homeRoom = targetRoom
+            resourceType: (getRoomConfig(ctx.roomName).localMinerResources || [RESOURCE_ENERGY])[0]
+        }),
+        body: (ctx, allowSmall) => pickBody('miner', ctx.energy, ctx.energyCapacity, allowSmall)
+    },
+
+    // 2. Майнеры для удалённых комнат (remote)
+    {
+        role: 'miner',
+        bodyRole: 'miner',
+        isRemote: true,
+        priority: 93,
+        condition: (ctx) => {
+            const config = getRoomConfig(ctx.roomName);
+            if (!config) return false;
+            if (!hasSufficientBaseCreeps(ctx.roomName)) return false;
+
+
+            // Выбираем удалённую комнату для майнинга
+            const targetRoom = selectTargetRoom(ctx.roomName, 'miner');
+            if (!targetRoom) return false;
+
+
+            // Проверяем контейнеры у источников в удалённой комнате
+            const sourceContainers = getSourceContainers(targetRoom);
+            if (sourceContainers.length === 0) return false;
+
+
+            // Считаем текущих майнеров для этой удалённой комнаты
+            const currentMiners = countCreepsByRole('miner', ctx.roomName, targetRoom);
+            const maxMiners = Math.min(
+                sourceContainers.length,
+                config.remoteCreeps.miner.count || 0
+            );
+
+            return currentMiners < maxMiners;
+        },
+        memory: (ctx) => {
+            const base = baseMemory('miner', ctx);
+            base.targetRoom = selectTargetRoom(ctx.roomName, 'miner');
+
+
+            // Определяем ресурс (из конфигурации удалённой комнаты)
+            const resources = getRoomConfig(ctx.roomName).remoteCreeps.miner.resources || [RESOURCE_ENERGY];
+            base.resourceType = _.sample(resources);
+
+
+            return base;
+        },
+        body: (ctx, allowSmall) => pickBody('miner', ctx.energy, ctx.energyCapacity, allowSmall)
+    },
+    {
+        role: 'logist',
+        bodyRole: 'logist',
+        priority: 85,
+        condition: (ctx) => {
+            const room = Game.rooms[ctx.roomName];
+            if (!room) return false;
+
+
+            // 1. Проверяем, есть ли Storage
+            const storage = room.storage;
+            if (!storage) return false;
+
+            // 2. Ищем контейнеры с не‑энергетическими ресурсами
+            const containers = room.find(FIND_STRUCTURES, {
+                filter: (s) =>
+                    s.structureType === STRUCTURE_CONTAINER &&
+                    _.some(s.store, (amt, res) => res !== RESOURCE_ENERGY && amt > 0)
+            });
+
+            if (containers.length === 0) return false;
+
+            // 3. Лимит: не больше 2 логистов на комнату
+            const currentLogists = _.filter(
+                (Game.creeps, creep => 
+                    creep.memory.role === 'logist' &&
+                    creep.room.name === ctx.roomName
+                ).length)
+
+
+            return currentLogists < 2;
+        },
+        memory: (ctx) => ({
+            role: 'logist',
+            homeRoom: ctx.roomName,
+            targetRoom: ctx.roomName,
+            state: 'collecting'
+        })
+    },
     // Удалённые роли (имеют targetRoom)
     {
-        role: 'remoteHarvester',
-        bodyRole: 'worker',
-        isRemote: true
+        role: 'crawler',
+        bodyRole: 'logist',
+        isRemote: true,
+        priority: 89
     },
     {
         role: 'remoteBuilder',
         bodyRole: 'worker',
-        isRemote: true
+        isRemote: true,
+        priority: 84
     },
     {
-        role: 'crawler',
-        bodyRole: 'logist',
-        isRemote: true
+        role: 'remoteHarvester',
+        bodyRole: 'worker',
+        isRemote: true,
+        priority: 80,
+        condition: (ctx) => {
+            const config = getRoomConfig(ctx.roomName);
+            if (!config) return false;
+            if (!hasSufficientBaseCreeps(ctx.roomName)) return false;
+
+            const targetRoom = selectTargetRoom(ctx.roomName, 'remoteHarvester');
+            if (!targetRoom) return false;
+
+            const currentCount = countCreepsByRole('remoteHarvester', ctx.roomName, targetRoom);
+            const desiredCount = config.remoteCreeps.remoteHarvester.count || 0;
+
+            return currentCount < desiredCount;
+        },
+            memory: (ctx) => {
+            const base = baseMemory('remoteHarvester', ctx);
+            base.targetRoom = selectTargetRoom(ctx.roomName, 'remoteHarvester');
+
+            // По умолчанию — энергия
+            base.resourceType = RESOURCE_ENERGY;
+
+            return base;
+        },
+        body: (ctx, allowSmall) => pickBody('worker', ctx.energy, ctx.energyCapacity, allowSmall)
     },
     {
         role: 'defender',
         bodyRole: 'defender',
         isRemote: true,
-        priority: 10 // высокий приоритет для спавна
+        priority: 50
     },
-    // {
-    //     role: 'claimer',
-    //     bodyRole: 'claimer',
-    //     isRemote: true
-    // }
     {
-        role: 'miner',
-        bodyRole: 'miner',
-        isRemote: true, // miner всегда работает в удалённой комнате
-        condition: (ctx) => {
-            const config = getRoomConfig(ctx.roomName);
-            if (!config) return false;
-
-            // 1. Проверяем, что база обеспечена (harvester/upgrader)
-            if (!hasSufficientBaseCreeps(ctx.roomName)) {
-                return false;
-            }
-
-            // 2. Выбираем целевую комнату для miner-а
-            const targetRoom = selectTargetRoom(ctx.roomName, 'miner');
-            if (!targetRoom) return false;
-
-            // 3. Находим контейнеры у источников в целевой комнате
-            const sourceContainers = getSourceContainers(targetRoom);
-            if (sourceContainers.length === 0) {
-                return false; // Нет контейнеров — не спавним miner-ов
-            }
-
-            // 4. Считаем текущих miner-ов в этой целевой комнате
-            const currentMiners = countCreepsByRole('miner', ctx.roomName, targetRoom);
-
-            // 5. Лимит: не больше, чем контейнеров
-            const maxMiners = sourceContainers.length;
-            const desiredCount = config.remoteCreeps.miner.count || 0;
-
-            return (
-                currentMiners < maxMiners &&       // не превышаем число контейнеров
-                currentMiners < desiredCount      // не превышаем желаемый count из config
-            );
-        },
-        // memory: (ctx) => {
-        //     const base = baseMemory('miner', ctx);
-        //     base.targetRoom = selectTargetRoom(ctx.roomName, 'miner');
-        //     return base;
-        // },
-        // body: (ctx, allowSmall) => pickBody('miner', ctx.energy, ctx.energyCapacity, allowSmall)
-    }
+        role: 'claimer',
+        bodyRole: 'claimer',
+        isRemote: true
+    },
 
 ].map(rule => ({
     ...rule,

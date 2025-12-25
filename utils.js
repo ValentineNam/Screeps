@@ -3,38 +3,73 @@ module.exports = {
         return creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
     },
 
-    findAvailableSource: (creep) => {
-        if (!creep || !creep.room) return null;
+    findAvailableSource: (creep, resourceType = RESOURCE_ENERGY) => {
+        const targetRoomName = creep.memory.targetRoom;
+        const room = Game.rooms[targetRoomName];
 
-        const sources = creep.room.find(FIND_SOURCES_ACTIVE);
-        if (sources.length === 0) return null;
-
-        // Есть лимит, сколько крипов может добывать один источник одновременно
-        const maxCreepsPerSource = 1; // Можно изменить по вашему сценарию
-
-        // Подсчёт занятости источников
-        const sourceUsage = {};
-        for (const source of sources) {
-            const creepsUsing = _.filter(Game.creeps, c =>
-                c.memory.sourceId === source.id &&
-                c.room.name === creep.room.name
-            );
-            sourceUsage[source.id] = creepsUsing.length;
+        if (!room) {
+            console.log(`[findAvailableSource] Room ${targetRoomName} not found`);
+            return null;
         }
 
-        // Фильтруем источники, у которых число крипов меньше maxCreepsPerSource
-        const freeSources = sources.filter(s => sourceUsage[s.id] < maxCreepsPerSource);
-
-        // Если есть свободные источники — выбираем ближайший из них
-        if (freeSources.length > 0) {
-            return creep.pos.findClosestByPath(freeSources, { ignoreCreeps: true });
+        if (!room.controller || !room.controller.my) {
+            console.log(`[findAvailableSource] Room ${targetRoomName} not owned`);
+            return null;
         }
 
-        // Все источники заняты, можно вернуть null или выбрать в любом случае
-        // Например, можно выбрать источник с минимальной занятость:
-        const minUsage = Math.min(...Object.values(sourceUsage));
-        const candidateSources = sources.filter(s => sourceUsage[s.id] === minUsage);
-        return creep.pos.findClosestByPath(candidateSources, { ignoreCreeps: true });
+        if (!resourceType) {
+            console.log(`[findAvailableSource] resourceType not defined for creep ${creep.name}, defaulting to ENERGY`);
+            resourceType = RESOURCE_ENERGY;
+        }
+
+        let candidates = [];
+
+        // 1. Собираем все доступные источники
+        if (resourceType === RESOURCE_ENERGY) {
+            candidates = room.find(FIND_SOURCES);
+        } else {
+            const minerals = room.find(FIND_MINERALS, {
+                filter: (m) => m.mineralType === resourceType
+            });
+
+            candidates = minerals.filter(mineral => {
+                const extractor = room.lookForAt(LOOK_STRUCTURES, mineral.pos).find(
+                    s => s.structureType === STRUCTURE_EXTRACTOR
+                );
+                return extractor && mineral.mineralAmount > 0; // проверяем наличие ресурса
+            });
+        }
+
+        if (candidates.length === 0) {
+            console.log(`[findAvailableSource] No sources found for ${resourceType} in ${targetRoomName}`);
+            return null;
+        }
+
+        // 2. Оцениваем нагрузку на каждый источник
+        const sourceScores = candidates.map(source => {
+            // Считаем крипов: на источнике + рядом (в радиусе 2 клеток)
+            const nearbyCreeps = room.find(FIND_CREEPS, {
+                filter: c => c.pos.getRangeTo(source.pos) <= 2 &&
+                            c.memory.state === 'harvesting' &&
+                            (c.memory.sourceId === source.id ||
+                            !c.memory.sourceId)
+            });
+
+            // Базовый штраф за расстояние (чтобы не все шли к самому близкому)
+            const distancePenalty = creep.pos.getRangeTo(source) * 0.1;
+
+            return {
+                source: source,
+                score: nearbyCreeps.length + distancePenalty
+            };
+        });
+
+        // 3. Выбираем источник с минимальным score (наименьшая нагрузка + разумное расстояние)
+        const bestSource = sourceScores.reduce((prev, curr) => {
+            return (curr.score < prev.score) ? curr : prev;
+        }).source;
+
+        return bestSource;
     },
 
     // Поиск приоритетных зданий для передачи ресурсов
@@ -255,6 +290,21 @@ module.exports = {
 
     countCreepsByRoleAndRoom: (role, roomName) => _.filter(Game.creeps, c => c.memory.role === role && c.memory.homeRoom === roomName).length,
 
+    countCreepsByRole: (role, homeRoom, targetRoom, opts = {}) => {
+        return _.filter(Game.creeps, creep => {
+            if (creep.memory.role !== role) return false;
+            if (creep.memory.homeRoom !== homeRoom) return false;
+            if (targetRoom && creep.memory.targetRoom !== targetRoom) return false;
+            
+            if (opts.resourceType && creep.memory.resourceType !== opts.resourceType) {
+                return false;
+            }
+            
+            return true;
+        }).length;
+    },
+
+
     creepsSum: (roomName) => _.filter(Game.creeps, (creep) => creep.memory.homeRoom === roomName).length,
 
     findResourceAndContainerPositions: (creep) => {
@@ -411,7 +461,71 @@ module.exports = {
         }
 
         return threat;
-    }
+    },
 
+    getSourcesInRoom: (roomName, resourceType) => {
+        const room = Game.rooms[roomName];
+        if (!room) return [];
+
+        if (resourceType === RESOURCE_ENERGY) {
+            return room.find(FIND_SOURCES);
+        } else {
+            return room.find(FIND_MINERALS, {
+                filter: mineral => mineral.mineralType === resourceType
+            });
+        }
+    },
+
+    getSourceContainers: (roomName, sources) => {
+        const room = Game.rooms[roomName];
+        if (!room) return [];
+
+        return room.find(FIND_STRUCTURES, {
+            filter: structure =>
+                structure.structureType === STRUCTURE_CONTAINER &&
+                sources.some(source =>
+                    structure.pos.isNearTo(source)
+                )
+        });
+    },
+
+    // utils.js
+
+    /**
+     * Получает конфигурацию комнаты из DESIRED_COUNTS по имени комнаты
+     * @param {string} roomName - Имя комнаты (например, 'E19S8')
+     * @returns {object|null} Конфигурация комнаты или null, если не найдена
+     */
+    getRoomConfig: (roomName, desiredCount) => {
+        const config = desiredCount.find(item => item.homeRoom === roomName);
+        return config || null;
+    },
+
+    sortEnemiesByHealParts: (enemies, attackerPos) => {
+        // 1. Фильтруем валидных врагов (убираем undefined/null)
+        const validEnemies = enemies.filter(enemy => enemy && enemy.pos);
+
+        // 2. Проверяем attackerPos
+        if (!attackerPos || !attackerPos.isRoomPosition) {
+            console.log('Ошибка: attackerPos не является RoomPosition');
+            return validEnemies; // возвращаем без сортировки по дистанции
+        }
+
+        return validEnemies.sort((a, b) => {
+            // 3. Считаем количество HEAL-частей
+            const healA = a.body.filter(p => p.type === HEAL).length;
+            const healB = b.body.filter(p => p.type === HEAL).length;
+
+            if (healA !== healB) {
+                return healB - healA; // приоритет: больше HEAL → выше
+            }
+
+            // 4. Если HEAL одинаково — сортируем по дистанции
+            const distA = attackerPos.getRangeTo(a.pos);
+            const distB = attackerPos.getRangeTo(b.pos);
+
+            return distA - distB;
+        });
+    }
 
 };

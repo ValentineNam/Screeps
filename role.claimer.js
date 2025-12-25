@@ -27,7 +27,7 @@ module.exports = {
             creep.memory.state = 'claim';
         }
 
-        const targetRoom = targetRoomName;
+        // const targetRoom = targetRoomName;
 
         // -- отправить в комнату --
         // const targetRoomName = creep.memory.homeRoom == 'E19S8' ? 'E18S8' : creep.memory.homeRoom; // целевая комната
@@ -36,15 +36,15 @@ module.exports = {
             creep.memory.targetRoom = targetRoomName;
         }
 
-        if (creep.memory.targetRoom !== targetRoomName) {
-            creep.memory.targetRoom = targetRoomName;
-        }
+        // if (creep.memory.targetRoom !== targetRoomName) {
+        //     creep.memory.targetRoom = targetRoomName;
+        // }
 
-        // const targetRoom = creep.memory.targetRoom;
+        const targetRoom = creep.memory.targetRoom;
 
         // Если не в целевой комнате, перемещаемся туда
-        if ((creep.room.name !== targetRoom) && creep.store.getUsedCapacity() == 0) {
-            const targetPos = new RoomPosition(32, 19, targetRoom);
+        if ((creep.room.name !== creep.memory.targetRoom) && creep.store.getUsedCapacity() == 0) {
+            const targetPos = new RoomPosition(32, 19, creep.memory.targetRoom);
             creep.moveTo(targetPos, {visualizePathStyle: {stroke: '#ffaa00'}, range: 3});
             // creep.memory.attackCooldown = 2;
             return; // ждем прибытия
@@ -83,20 +83,35 @@ module.exports = {
             return;
         }
 
-        // 6. Устанавливаем/обновляем подпись комнаты (если мы владелец или есть резерв)
-        if (controller.my || (controller.reservation && controller.reservation.username === creep.owner.username)) {
-            const signText = `База: ${targetRoom} | Владелец: ${creep.owner.username}`;
-            
-            // Обновляем подпись, если её нет или осталось меньше 100 тиков
-            if (!creep.room.sign || creep.room.sign.time < Game.time + 100) {
-                const signResult = creep.room.sign.set(signText);
-                if (signResult === OK) {
-                    console.log(`Подпись обновлена в ${targetRoom}`);
-                } else {
-                    console.log(`Ошибка при установке подписи: ${signResult}`);
-                }
-            }
-        }
+        // 6. Устанавливаем/обновляем подпись комнаты
+        // if (controller.my || (controller.reservation && controller.reservation.username === creep.owner.username)) {
+        //     const signText = `База: ${targetRoom} | Владелец: ${creep.owner.username}`;
+
+        //     // Проверяем, есть ли уже подпись в комнате
+        //     if (creep.room.sign) {
+        //         // Если подпись есть, проверяем оставшееся время
+        //         if (creep.room.sign.text !== signText || creep.room.sign.time < Game.time + 100) {
+        //             const signResult = creep.room.sign.set(signText);
+        //             if (signResult === OK) {
+        //                 console.log(`Подпись обновлена в ${targetRoom}`);
+        //             } else {
+        //                 console.log(`Ошибка при обновлении подписи: ${signResult}`);
+        //             }
+        //         }
+        //     } else {
+        //         // Если подписи нет — пытаемся установить
+        //         const signResult = creep.room.sign.set(signText);
+        //         if (signResult === OK) {
+        //             console.log(`Подпись установлена в ${targetRoom}`);
+        //         } else if (signResult === ERR_NOT_IN_RANGE) {
+        //             creep.moveTo(controller, { visualizePathStyle: { stroke: '#ffff00' } });
+        //             console.log(`${creep.name} движется к контроллеру для установки подписи`);
+        //         } else {
+        //             console.log(`Ошибка при установке подписи: ${signResult}`);
+        //         }
+        //     }
+        // }
+
 
         // 7. Попытка захвата
         const claimResult = creep.claimController(controller);

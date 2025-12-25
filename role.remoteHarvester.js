@@ -5,7 +5,7 @@ const myRooms = constants.ROOMS;
 module.exports = {
     run: (creep) => {
         // Инициализация состояния
-        if (!creep.memory.state) {
+        if (!creep.memory.state || creep.memory.state !== 'harvesting' || creep.memory.state !== 'delivering') {
             creep.memory.state = 'harvesting';
         }
 

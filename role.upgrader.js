@@ -54,7 +54,7 @@ module.exports = {
             const storages = creep.room.find(FIND_MY_STRUCTURES, {
                 filter: (structure) =>
                     structure.structureType === STRUCTURE_STORAGE &&
-                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 3000
+                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 30000
             });
 
             if (storages.length > 0) {

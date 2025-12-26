@@ -98,7 +98,8 @@ function setLogLevels(levels) {
  * Get current log level configuration
  */
 function getLogLevels() {
-    return Memory.logs;
+    let res = JSON.stringify( Memory.logs);
+    return res;
 }
 
 module.exports = {
@@ -398,7 +399,7 @@ module.exports = {
         const cached = Memory.creepCounts[cacheKey];
         
         // Кешируем результат на 5 тиков
-        if (cached && cached.tick && Game.time - cached.tick < 5) {
+        if (cached && cached.tick && Memory.stats.currTime - cached.tick < 5) {
             return cached.count;
         }
         
@@ -417,7 +418,7 @@ module.exports = {
         // Сохраняем в кеш
         Memory.creepCounts[cacheKey] = {
             count: count,
-            tick: Game.time
+            tick: Memory.stats.currTime
         };
         
         return count;
@@ -725,5 +726,283 @@ module.exports = {
     setLogLevel,
     setLogLevels,
     getLogLevels,
-    LOG_LEVELS
+    LOG_LEVELS,
+    
+    // Helper functions for cached data
+    /**
+     * Gets spawns from cache if available, otherwise from the game
+     * @param {string} roomName - Name of the room
+     * @returns {StructureSpawn[]} Array of spawn objects
+     */
+    getCachedSpawns: (roomName) => {
+        if (Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].spawns) {
+            return Memory.rooms[roomName].spawns
+                .map(spawnData => {
+                    try {
+                        return Game.getObjectById(spawnData.id);
+                    } catch (e) {
+                        return null;
+                    }
+                })
+                .filter(Boolean);
+        }
+        
+        // Fallback to game engine
+        const room = Game.rooms[roomName];
+        if (!room) return [];
+        return room.find(FIND_MY_SPAWNS);
+    },
+    
+    /**
+     * Gets controller from cache if available, otherwise from the game
+     * @param {string} roomName - Name of the room
+     * @returns {StructureController|null} Controller object or null
+     */
+    getCachedController: (roomName) => {
+        if (Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].controller) {
+            try {
+                return Game.getObjectById(Memory.rooms[roomName].controller.id);
+            } catch (e) {
+                return null;
+            }
+        }
+        
+        // Fallback to game engine
+        const room = Game.rooms[roomName];
+        if (!room) return null;
+        return room.controller;
+    },
+    
+    /**
+     * Gets dropped resources from cache if available, otherwise from the game
+     * @param {string} roomName - Name of the room
+     * @returns {Resource[]} Array of dropped resource objects
+     */
+    getCachedDroppedResources: (roomName) => {
+        if (Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].droppedResources) {
+            return Memory.rooms[roomName].droppedResources
+                .map(dropData => {
+                    try {
+                        return Game.getObjectById(dropData.id);
+                    } catch (e) {
+                        return null;
+                    }
+                })
+                .filter(Boolean);
+        }
+        
+        // Fallback to game engine
+        const room = Game.rooms[roomName];
+        if (!room) return [];
+        return room.find(FIND_DROPPED_RESOURCES);
+    },
+    
+    /**
+     * Gets containers from cache if available, otherwise from the game
+     * @param {string} roomName - Name of the room
+     * @returns {StructureContainer[]} Array of container objects
+     */
+    getCachedContainers: (roomName) => {
+        if (Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].structures) {
+            // Filter for containers in cached structures
+            const cachedContainers = Memory.rooms[roomName].structures
+                .filter(s => s.type === STRUCTURE_CONTAINER)
+                .map(containerData => {
+                    try {
+                        return Game.getObjectById(containerData.id);
+                    } catch (e) {
+                        return null;
+                    }
+                })
+                .filter(Boolean);
+                
+            return cachedContainers;
+        }
+        
+        // Fallback to game engine
+        const room = Game.rooms[roomName];
+        if (!room) return [];
+        return room.find(FIND_STRUCTURES, {
+            filter: structure => structure.structureType === STRUCTURE_CONTAINER
+        });
+    },
+    
+    /**
+     * Gets storage structures from cache if available, otherwise from the game
+     * @param {string} roomName - Name of the room
+     * @returns {StructureStorage[]} Array of storage objects
+     */
+    getCachedStorage: (roomName) => {
+        if (Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].structures) {
+            // Filter for storage in cached structures
+            const cachedStorages = Memory.rooms[roomName].structures
+                .filter(s => s.type === STRUCTURE_STORAGE)
+                .map(storageData => {
+                    try {
+                        return Game.getObjectById(storageData.id);
+                    } catch (e) {
+                        return null;
+                    }
+                })
+                .filter(Boolean);
+                
+            return cachedStorages;
+        }
+        
+        // Fallback to game engine
+        const room = Game.rooms[roomName];
+        if (!room) return [];
+        return room.find(FIND_MY_STRUCTURES, {
+            filter: structure => structure.structureType === STRUCTURE_STORAGE
+        });
+    },
+    
+    /**
+     * Gets towers from cache if available, otherwise from the game
+     * @param {string} roomName - Name of the room
+     * @returns {StructureTower[]} Array of tower objects
+     */
+    getCachedTowers: (roomName) => {
+        if (Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].structures) {
+            // Filter for towers in cached structures
+            const cachedTowers = Memory.rooms[roomName].structures
+                .filter(s => s.type === STRUCTURE_TOWER)
+                .map(towerData => {
+                    try {
+                        return Game.getObjectById(towerData.id);
+                    } catch (e) {
+                        return null;
+                    }
+                })
+                .filter(Boolean);
+                
+            return cachedTowers;
+        }
+        
+        // Fallback to game engine
+        const room = Game.rooms[roomName];
+        if (!room) return [];
+        return room.find(FIND_MY_STRUCTURES, {
+            filter: structure => structure.structureType === STRUCTURE_TOWER
+        });
+    },
+    
+    /**
+     * Gets structures by type from cache if available, otherwise from the game
+     * @param {string} roomName - Name of the room
+     * @param {string} structureType - Type of structure to look for
+     * @returns {Structure[]} Array of structure objects
+     */
+    getCachedStructuresByType: (roomName, structureType) => {
+        if (Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].structures) {
+            // Filter for specific structure type in cached structures
+            const cachedStructures = Memory.rooms[roomName].structures
+                .filter(s => s.type === structureType)
+                .map(structureData => {
+                    try {
+                        return Game.getObjectById(structureData.id);
+                    } catch (e) {
+                        return null;
+                    }
+                })
+                .filter(Boolean);
+                
+            return cachedStructures;
+        }
+        
+        // Fallback to game engine
+        const room = Game.rooms[roomName];
+        if (!room) return [];
+        return room.find(FIND_MY_STRUCTURES, {
+            filter: structure => structure.structureType === structureType
+        });
+    },
+    
+    /**
+     * Gets creeps at a specific position from cache if available, otherwise from the game
+     * @param {RoomPosition} pos - Position to check
+     * @returns {Creep[]} Array of creep objects at the position
+     */
+    getCachedCreepsAtPos: (pos) => {
+        // For position-specific creep data, we need to check the room's cached creeps
+        const roomName = pos.roomName;
+        if (Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].creeps) {
+            const creepsAtPos = Memory.rooms[roomName].creeps
+                .filter(creepData => {
+                    return creepData.pos.x === pos.x && 
+                           creepData.pos.y === pos.y && 
+                           creepData.room === roomName;
+                })
+                .map(creepData => {
+                    try {
+                        return Game.getObjectById(creepData.id);
+                    } catch (e) {
+                        return null;
+                    }
+                })
+                .filter(Boolean);
+                
+            return creepsAtPos;
+        }
+        
+        // Fallback to game engine
+        return pos.lookFor(LOOK_CREEPS);
+    },
+    
+    /**
+     * Gets extractor at a position from cache if available, otherwise from the game
+     * @param {RoomPosition} pos - Position to check
+     * @returns {StructureExtractor|null} Extractor object or null
+     */
+    getCachedExtractorAtPos: (pos) => {
+        // Check cached structures for extractor at position
+        const roomName = pos.roomName;
+        if (Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].structures) {
+            const extractorData = Memory.rooms[roomName].structures
+                .find(s => s.type === STRUCTURE_EXTRACTOR && 
+                          s.pos.x === pos.x && 
+                          s.pos.y === pos.y);
+                          
+            if (extractorData) {
+                try {
+                    return Game.getObjectById(extractorData.id);
+                } catch (e) {
+                    return null;
+                }
+            }
+        }
+        
+        // Fallback to game engine
+        const structures = pos.lookFor(LOOK_STRUCTURES);
+        return structures.find(s => s.structureType === STRUCTURE_EXTRACTOR) || null;
+    },
+    
+    /**
+     * Gets structure at a position from cache if available, otherwise from the game
+     * @param {RoomPosition} pos - Position to check
+     * @param {string} structureType - Type of structure to look for
+     * @returns {Structure|null} Structure object or null
+     */
+    getCachedStructureAtPos: (pos, structureType) => {
+        // Check cached structures at position
+        const roomName = pos.roomName;
+        if (Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].structures) {
+            const structureData = Memory.rooms[roomName].structures
+                .find(s => s.type === structureType && 
+                          s.pos.x === pos.x && 
+                          s.pos.y === pos.y);
+                          
+            if (structureData) {
+                try {
+                    return Game.getObjectById(structureData.id);
+                } catch (e) {
+                    return null;
+                }
+            }
+        }
+        
+        // Fallback to game engine
+        const structures = pos.lookFor(LOOK_STRUCTURES);
+        return structures.find(s => s.structureType === structureType) || null;
+    }
 };

@@ -1,6 +1,5 @@
 const baseRole = require('./role.base');
 const utils = require('./utils');
-const sourcesModule = utils;
 const { log } = utils;
 
 module.exports = {
@@ -52,20 +51,20 @@ module.exports = {
         if (creep.store[RESOURCE_ENERGY] === 0) {
             state = 'harvesting';
             creep.memory.enteredTargetRoom = false;
-            log('DEBUG', `switch to harvesting (empty)`, creep);
+            log('INFO', `switch to harvesting (empty)`, creep);
         }
         // Если инвентарь полон — решаем, что делать дальше
         else if (creep.store.getFreeCapacity() === 0) {
-            const hasConstruction = sourcesModule.findPriorityConstructionSite(creep.room);
-            const repairTarget = sourcesModule.findPriorityRepairTarget(creep.room); // предполагаемая функция
+            const hasConstruction = utils.findPriorityConstructionSite(creep.room);
+            const repairTarget = utils.findPriorityRepairTarget(creep.room); // предполагаемая функция
 
 
             if (hasConstruction) {
                 state = 'building';
-                log('DEBUG', `switch to building`, creep);
+                log('INFO', `switch to building`, creep);
             } else if (repairTarget) {
                 state = 'repair';
-                log('DEBUG', `switch to repair`, creep);
+                log('INFO', `switch to repair`, creep);
             } else {
                 // Нет задач — ждём
                 state = 'waiting';
@@ -143,7 +142,7 @@ module.exports = {
                     reusePath: 5
                 });
             } else if (result === OK) {
-                log('DEBUG', `harvesting from source`, creep);
+                log('INFO', `harvesting from source`, creep);
             } else {
                 log('WARN', `harvest error: ${result}`, creep);
             }
@@ -152,7 +151,7 @@ module.exports = {
 
         // 5. Состояние: building (строительство)
         if (state === 'building') {
-            const constructionSite = sourcesModule.findPriorityConstructionSite(creep.room);
+            const constructionSite = utils.findPriorityConstructionSite(creep.room);
             if (!constructionSite) {
                 log('INFO', `no construction site, switching to repair`, creep);
                 state = 'repair';
@@ -167,13 +166,13 @@ module.exports = {
                     reusePath: 5
                 });
             } else if (result === OK) {
-                log('DEBUG', `building`, creep);
+                log('INFO', `building`, creep);
             } else if (result === ERR_NOT_ENOUGH_RESOURCES) {
                 // Нет ресурсов — переключаемся на сбор
                 state = 'harvesting';
                 creep.memory.enteredTargetRoom = false;
                 creep.memory.state = state;
-                log('DEBUG', `out of energy, switch to harvesting`, creep);
+                log('INFO', `out of energy, switch to harvesting`, creep);
             } else {
                 log('WARN', `build error: ${result}`, creep);
             }
@@ -207,11 +206,11 @@ module.exports = {
                     reusePath: 5
                 });
             } else if (result === OK) {
-                log('DEBUG', `repairing`, creep);
+                log('INFO', `repairing`, creep);
             } else if (result === ERR_NOT_ENOUGH_RESOURCES) {
                 state = 'harvesting';
                 creep.memory.state = state;
-                log('DEBUG', `out of energy, switch to harvesting`, creep);
+                log('INFO', `out of energy, switch to harvesting`, creep);
             } else {
                 log('WARN', `repair error: ${result}`, creep);
             }

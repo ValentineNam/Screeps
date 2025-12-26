@@ -88,7 +88,7 @@ module.exports = {
         //     // Проверяем, есть ли уже подпись в комнате
         //     if (creep.room.sign) {
         //         // Если подпись есть, проверяем оставшееся время
-        //         if (creep.room.sign.text !== signText || creep.room.sign.time < Game.time + 100) {
+        //         if (creep.room.sign.text !== signText || creep.room.sign.time < Memory.stats.currTime + 100) {
         //             const signResult = creep.room.sign.set(signText);
         //             if (signResult === OK) {
         //                 console.log(`Подпись обновлена в ${targetRoom}`);
@@ -124,7 +124,7 @@ module.exports = {
             const claimResult = creep.claimController(controller);
             
             if (claimResult === OK) {
-                log('INFO', `успешно захватил комнату ${targetRoom}`, creep);
+                log('DEBUG', `успешно захватил комнату ${targetRoom}`, creep);
                 return; // После захвата можно выйти
             }
             
@@ -141,11 +141,11 @@ module.exports = {
                     Game.rooms[roomName].controller.my
                 ).length;
                 
-                log('ERROR', `НЕДОСТАТОЧНО GCL для захвата комнаты ${targetRoom}. Текущий GCL: ${Game.gcl.level}, требуется: ${ownedRoomsCount + 1} (уже захвачено комнат: ${ownedRoomsCount})`, creep);
+                log('WARN', `НЕДОСТАТОЧНО GCL для захвата комнаты ${targetRoom}. Текущий GCL: ${Game.gcl.level}, требуется: ${ownedRoomsCount + 1} (уже захвачено комнат: ${ownedRoomsCount})`, creep);
             } else if (claimResult === ERR_INVALID_TARGET) {
                 log('WARN', `контроллер в комнате ${targetRoom} не может быть захвачен (возможно, уже принадлежит игроку или имеет недопустимое состояние)`, creep);
             } else if (claimResult === ERR_BUSY) {
-                log('INFO', `контроллер в комнате ${targetRoom} занят (уже принадлежит кому-то)`, creep);
+                log('WARN', `контроллер в комнате ${targetRoom} занят (уже принадлежит кому-то)`, creep);
             } else {
                 log('WARN', `не смог захватить комнату ${targetRoom} (claimResult=${claimResult}), это homeRoom, поэтому НЕ резервируем`, creep);
             }
@@ -155,7 +155,7 @@ module.exports = {
             const claimResult = creep.claimController(controller);
 
             if (claimResult === OK) {
-                log('INFO', `успешно захватил комнату ${targetRoom}`, creep);
+                log('DEBUG', `успешно захватил комнату ${targetRoom}`, creep);
                 return; // После захвата можно выйти
             }
 

@@ -27,14 +27,36 @@ module.exports = {
 
             // 2. В комнате-источнике: забираем энергию
             if (creep.store.getFreeCapacity() > 0) {
-                // Ищем контейнер с энергией
-                const containers = creep.room.find(FIND_STRUCTURES, {
-                    filter: s => s.structureType === STRUCTURE_CONTAINER && s.store[RESOURCE_ENERGY] > 0
-                });
+                // Ищем контейнер с энергией из кеша, если он есть, иначе из игры
+                let containers = [];
+                if (Memory.rooms && Memory.rooms[creep.room.name] && Memory.rooms[creep.room.name].structures) {
+                    // Ищем контейнеры с энергией из кешированных структур
+                    const cachedContainers = Memory.rooms[creep.room.name].structures
+                        .filter(s => s.type === STRUCTURE_CONTAINER && s.store && s.store[RESOURCE_ENERGY] > 0)
+                        .map(s => {
+                            try {
+                                return Game.getObjectById(s.id);
+                            } catch (e) {
+                                return null;
+                            }
+                        })
+                        .filter(Boolean);
+                    
+                    if (cachedContainers.length > 0) {
+                        containers = cachedContainers;
+                    }
+                }
+                
+                // Резервный вариант - обращение к игровому движку
+                if (containers.length === 0) {
+                    containers = creep.room.find(FIND_STRUCTURES, {
+                        filter: s => s.structureType === STRUCTURE_CONTAINER && s.store[RESOURCE_ENERGY] > 0
+                    });
+                }
 
                 if (containers.length > 0) {
                     // Берём контейнер с максимальным количеством энергии
-                    const target = containers.reduce((max, c) => 
+                    const target = containers.reduce((max, c) =>
                         c.store[RESOURCE_ENERGY] > max.store[RESOURCE_ENERGY] ? c : max,
                         containers[0]
                     );
@@ -43,10 +65,9 @@ module.exports = {
                         creep.moveTo(target, { visualizePathStyle: { stroke: '#ffaa00' } });
                     }
                 } else {
-                    // Ищем упавшие ресурсы
-                    const dropped = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
-                        filter: r => r.resourceType === RESOURCE_ENERGY && r.amount > 0
-                    });
+                    // Ищем упавшие ресурсы через helper функцию
+                    const droppedResources = utils.getCachedDroppedResources(creep.room.name);
+                    const dropped = creep.pos.findClosestByPath(droppedResources.filter(r => r.resourceType === RESOURCE_ENERGY && r.amount > 0));
 
                     if (dropped) {
                         if (creep.pickup(dropped) === ERR_NOT_IN_RANGE) {
@@ -90,7 +111,7 @@ module.exports = {
                     }
                 } else {
                     // Нет цели для передачи — ждём, но не переключаем состояние
-                    creep.say('Wait target');
+                    creep.say('⏳ Wait trgt');
                     // Можно добавить логику поиска альтернативной цели
                     const altTarget = utils.findPriorityTarget(creep);
                     if (altTarget) {

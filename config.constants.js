@@ -392,7 +392,7 @@ const DESIRED_COUNTS = [
         }
     },
     {
-        homeRoom: 'E15N1',
+        homeRoom: 'E14N1',
         baseCoverage: {
             harvesterRatio: 0.5,
             upgraderRatio: 0.6

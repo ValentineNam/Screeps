@@ -1,6 +1,5 @@
 const constants = require('./config.constants');
 const utils = require('./utils');
-const sourcesModule = utils;
 const { log } = utils;
 
 module.exports = {
@@ -61,7 +60,7 @@ module.exports = {
         enemies = enemies.filter(e => e !== null);
 
         // 🔁 Сортируем врагов по приоритету
-        const sortedEnemies = sourcesModule.sortEnemiesByPriority(enemies);
+        const sortedEnemies = utils.sortEnemiesByPriority(enemies);
         const targetEnemy = sortedEnemies.length > 0 ? sortedEnemies[0] : null;
 
         // 3. Логика переключения режимов

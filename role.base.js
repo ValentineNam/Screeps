@@ -114,13 +114,17 @@ module.exports = {
 
     // Проверяет здоровье крипа: возвращает true, если текущее здоровье ниже порога (например 0.5)
     checkHealth: (creep, threshold) => {
-        if (!creep || !creep.hitsMax) return false;
-        // threshold precedence: explicit arg -> creep.memory.lowHpThreshold -> constants -> default 0.5
-        if (threshold === undefined || threshold === null) {
-            threshold = (creep.memory && creep.memory.lowHpThreshold) || constants.LOW_HP_RETURN_RATIO || 0.5;
+        // раз в 3 хода, но пропускаем кратные 5, для экономии ресурсов cpu (каждый 15 ход)
+        if ((Memory.stats.currTime % 3 === 0) && !(Memory.stats.currTime % 5 === 0)) {
+            if (!creep || !creep.hitsMax) return false;
+            if (threshold === undefined || threshold === null) {
+                threshold = (creep.memory && creep.memory.lowHpThreshold) || constants.LOW_HP_RETURN_RATIO || 0.5;
+            }
+            const ratio = creep.hits / creep.hitsMax;
+            return ratio <= threshold;
+        } else {
+            return false;
         }
-        const ratio = creep.hits / creep.hitsMax;
-        return ratio <= threshold;
     },
 
     // Устанавливает флаг возврата домой и начинает движение в homeRoom

@@ -48,13 +48,13 @@ function attemptSpawn(spawn, body, name, mem, ctx, role, reason) {
     // Ensure pending structure exists and add reservation before actual spawn call
     if (!Memory.spawnPending) Memory.spawnPending = {};
     if (!Memory.spawnPending[roomName]) Memory.spawnPending[roomName] = [];
-    Memory.spawnPending[roomName].push({ time: (typeof Game !== 'undefined' && Game.time) ? Game.time : Date.now(), role: role || (mem && mem.role), targetRoom: mem && mem.targetRoom, name: name });
+    Memory.spawnPending[roomName].push({ time: (typeof Game !== 'undefined' && Memory.stats.currTime) ? Memory.stats.currTime : Date.now(), role: role || (mem && mem.role), targetRoom: mem && mem.targetRoom, name: name });
 
     const res = spawn.spawnCreep(body, name, { memory: mem });
     if (res === OK) {
         const cost = body.reduce((s, p) => s + (BODYPART_COST[p] || 0), 0);
         const entry = {
-            time: (typeof Game !== 'undefined' && Game.time) ? Game.time : Date.now(),
+            time: (typeof Game !== 'undefined' && Memory.stats.currTime) ? Memory.stats.currTime : Date.now(),
             role: mem && mem.role ? mem.role : role,
             reason: reason || 'spawn',
             targetRoom: mem && mem.targetRoom ? mem.targetRoom : roomName,

@@ -73,11 +73,9 @@ module.exports = {
         // 6. Режим: Добыча (mining)
         if (creep.memory.state === 'mining') {
             // 6.1. Ищем ближайший свободный контейнер
-            const containers = creep.room.find(FIND_STRUCTURES, {
-                filter: (structure) =>
-                    structure.structureType === STRUCTURE_CONTAINER &&
-                    structure.store.getFreeCapacity() > 0 // проверяем общую ёмкость
-            });
+            const containers = utils.getCachedContainers(creep.room.name).filter(container =>
+                container.store.getFreeCapacity() > 0 // проверяем общую ёмкость
+            );
 
             if (containers.length === 0) {
                 log('WARN', `Нет доступных контейнеров.`, creep);
@@ -88,7 +86,7 @@ module.exports = {
             // Фильтруем контейнеры без других крипов сверху
             const freeContainers = containers
                 .filter(container => {
-                    const creepsOnTile = creep.room.lookForAt(LOOK_CREEPS, container.pos);
+                    const creepsOnTile = utils.getCachedCreepsAtPos(container.pos);
                     return creepsOnTile.filter(c => c.id !== creep.id).length === 0;
                 })
                 .sort((a, b) => creep.pos.getRangeTo(a) - creep.pos.getRangeTo(b));
@@ -130,9 +128,7 @@ module.exports = {
             if (deposits.length > 0) {
                 const validDeposit = deposits.find(deposit => {
                     // Проверяем: есть ли extractor и принадлежит ли комната нам
-                    const extractor = creep.room.lookForAt(LOOK_STRUCTURES, deposit.pos).find(
-                        s => s.structureType === STRUCTURE_EXTRACTOR
-                    );
+                    const extractor = utils.getCachedExtractorAtPos(deposit.pos);
                     return extractor && creep.room.controller && creep.room.controller.my;
                 });
 
@@ -175,7 +171,7 @@ module.exports = {
 
         // 7. Режим: Ожидание (когда инвентарь полон)
         else if (creep.memory.state === 'waiting') {
-            const container = creep.pos.lookForStructure(STRUCTURE_CONTAINER);
+            const container = utils.getCachedStructureAtPos(creep.pos, STRUCTURE_CONTAINER);
             if (container && container.store.getFreeCapacity() > 0) {
                 creep.memory.state = 'mining';
                 creep.memory.atContainer = false;

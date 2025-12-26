@@ -1,7 +1,6 @@
 const _ = require('lodash');
 const constants = require('./config.constants');
 const utils = require('./utils');
-const sourcesModule = utils;
 const { log } = utils;
 
 module.exports = {

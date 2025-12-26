@@ -1,7 +1,6 @@
 const _ = require('lodash');
 const constants = require('./config.constants');
 const utils = require('./utils');
-const sourcesModule = utils;
 const { log } = utils;
 
 const lowHpLvl = 0.35; // 35%
@@ -201,8 +200,8 @@ module.exports = {
                 creep.say('⚔ HOLD');
 
                 if (distance === 2) {
-                    // Немного отступаем, чтобы не попасть под ближнюю атаку
-                                        const retreatPos = creep.pos.findPathTo(
+                    // Немного отступаем, чтобы не попасть под ближнюю атаку                    
+                    const retreatPos = creep.pos.findPathTo(
                         closestHostile,
                         { ignoreCreeps: true, flee: true, maxRooms: 1 }
                     )[0] || creep.pos;

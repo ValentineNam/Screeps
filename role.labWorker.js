@@ -37,7 +37,7 @@ module.exports = {
                     if (allDone) {
                         // mark produce as ready_for_lab
                         produce.status = 'ready_for_lab';
-                        produce.readyAt = Game.time;
+                        produce.readyAt = Memory.stats.currTime;
                     }
                 }
                 return; // No task to handle right now
@@ -106,7 +106,7 @@ module.exports = {
                         const reactionResult = inputLab1.runReaction(inputLab2, outputLab);
                         if (reactionResult === OK) {
                             task.status = 'in_progress';
-                            task.startedAt = Game.time;
+                            task.startedAt = Memory.stats.currTime;
                         } else {
                             // Could not start reaction, keep in ready state
                             task.status = 'ready_for_lab';
@@ -125,7 +125,7 @@ module.exports = {
                         const reactionResult = inputLab1.runReaction(inputLab2, outputLab);
                         if (reactionResult === OK) {
                             task.status = 'in_progress';
-                            task.startedAt = Game.time;
+                            task.startedAt = Memory.stats.currTime;
                         } else {
                             task.status = 'ready_for_lab';
                         }
@@ -176,7 +176,7 @@ module.exports = {
                     
                     if (task.amount <= 0) {
                         task.status = 'done';
-                        task.doneAt = Game.time;
+                        task.doneAt = Memory.stats.currTime;
                         delete creep.memory.task;
                     } else {
                         // Need to get more resources

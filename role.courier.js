@@ -85,7 +85,7 @@ module.exports = {
 
         if (!task.amount || task.amount <= 0) {
             task.status = 'done';
-            task.doneAt = Game.time;
+            task.doneAt = Memory.stats.currTime;
         }
     }
 };

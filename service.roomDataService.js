@@ -13,16 +13,19 @@ const roomDataService = {
         const lastUpdated = mem.lastUpdated || 0;
 
         // Пропускаем обновление, если не прошло достаточно тиков
-        if (Game.time - lastUpdated < forceUpdateTick) return;
+        if (Memory.stats.currTime - lastUpdated < forceUpdateTick) return;
 
         // Собираем данные
         mem.structures = this._getStructures(room);
+        mem.spawns = this._getSpawns(room);
+        mem.controller = this._getController(room);
+        mem.droppedResources = this._getDroppedResources(room);
         mem.sources = this._getSources(room);
         mem.minerals = this._getMinerals(room);
         mem.enemies = this._getEnemies(room);
         mem.enemyStructures = this._getEnemyStructures(room);
         mem.stats = this._calculateStats(room, mem);
-        mem.lastUpdated = Game.time;
+        mem.lastUpdated = Memory.stats.currTime;
 
         Memory.rooms[roomName] = mem;
     },
@@ -36,6 +39,55 @@ const roomDataService = {
             energy: s.energy ? s.energy : null,
             store: s.store ? Object.assign({}, s.store) : null
         }));
+    },
+
+    _getSpawns(room) {
+        return room.find(FIND_MY_SPAWNS).map(s => ({
+            id: s.id,
+            name: s.name,
+            pos: s.pos,
+            hits: s.hits,
+            hitsMax: s.hitsMax,
+            spawning: s.spawning ? {
+                name: s.spawning.name,
+                needTime: s.spawning.needTime,
+                remainingTime: s.spawning.remainingTime,
+                creep: s.spawning.creep ? s.spawning.creep.name : null,
+                directions: s.spawning.directions
+            } : null,
+            store: Object.assign({}, s.store),
+            storeCapacity: s.storeCapacity
+        }));
+    },
+
+    _getController(room) {
+        if (!room.controller) return null;
+        
+        return {
+            id: room.controller.id,
+            pos: room.controller.pos,
+            level: room.controller.level,
+            progress: room.controller.progress,
+            progressTotal: room.controller.progressTotal,
+            upgradeBlocked: room.controller.upgradeBlocked,
+            reservation: room.controller.reservation ? {
+                username: room.controller.reservation.username,
+                ticksToEnd: room.controller.reservation.ticksToEnd
+            } : null,
+            owner: room.controller.owner ? {
+                username: room.controller.owner.username
+            } : null,
+            isPowerEnabled: room.controller.isPowerEnabled,
+            safeMode: room.controller.safeMode,
+            safeModeAvailable: room.controller.safeModeAvailable,
+            safeModeCooldown: room.controller.safeModeCooldown,
+            sign: room.controller.sign ? {
+                username: room.controller.sign.username,
+                text: room.controller.sign.text,
+                time: room.controller.sign.time,
+                datetime: room.controller.sign.datetime
+            } : null
+        };
     },
 
     _getSources(room) {
@@ -73,6 +125,15 @@ const roomDataService = {
             type: s.structureType,
             pos: s.pos,
             owner: s.owner.username
+        }));
+    },
+
+    _getDroppedResources(room) {
+        return room.find(FIND_DROPPED_RESOURCES).map(r => ({
+            id: r.id,
+            pos: r.pos,
+            resourceType: r.resourceType,
+            amount: r.amount
         }));
     },
 

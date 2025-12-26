@@ -5,7 +5,7 @@ module.exports = {
     Memory.baseStates[base] = {
       state,
       prevState, // сохраняем предыдущее состояние
-      lastChange: Game.time,
+      lastChange: Memory.stats.currTime,
       ...params
     };
   },

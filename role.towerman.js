@@ -1,5 +1,7 @@
-const sourcesModule = require('./utils'); // ваш модуль поиска источников
+const utils = require('./utils'); // ваш модуль поиска источников
 const targetRooms = ['E19S7']; // список целевых комнат
+const STORAGE_LIMIT = 30000;
+const { log } = utils;
 
 // Настройки
 const WAIT_TIMEOUT = 50; // ticks to wait on source before switching to delivering
@@ -37,12 +39,10 @@ module.exports = {
 
         if (creep.memory.state === 'harvesting') {
             // 1. Ищем контейнеры ≥70% (как раньше)
-            const nearbyContainers = creep.room.find(FIND_STRUCTURES, {
-                filter: (structure) =>
-                    structure.structureType === STRUCTURE_CONTAINER &&
-                    structure.store.getUsedCapacity(RESOURCE_ENERGY) > 0 &&
-                    (structure.store.getUsedCapacity(RESOURCE_ENERGY) / structure.store.getCapacity()) >= 0.5
-            });
+            const nearbyContainers = utils.getCachedContainers(creep.room.name).filter(structure =>
+                structure.store.getUsedCapacity(RESOURCE_ENERGY) > 0 &&
+                (structure.store.getUsedCapacity(RESOURCE_ENERGY) / structure.store.getCapacity()) >= 0.5
+            );
 
             if (nearbyContainers.length > 0) {
                 const closestContainer = nearbyContainers.sort((a, b) =>
@@ -64,12 +64,10 @@ module.exports = {
                 }
             }
 
-            // 2. Ищем хранилище (Storage) с ≥5000 ед. энергии
-            const storages = creep.room.find(FIND_MY_STRUCTURES, {
-                filter: (structure) =>
-                    structure.structureType === STRUCTURE_STORAGE &&
-                    structure.store.getUsedCapacity(RESOURCE_ENERGY) >= 29000
-            });
+            // 2. Ищем хранилище (Storage) с ≥30000 ед. энергии
+            const storages = utils.getCachedStorage(creep.room.name).filter(structure =>
+                structure.store.getUsedCapacity(RESOURCE_ENERGY) >= STORAGE_LIMIT
+            );
 
             if (storages.length > 0) {
                 // Сортируем по расстоянию
@@ -95,9 +93,9 @@ module.exports = {
             }
 
             // 3. Ищем упавшую энергию (как раньше)
-            const droppedEnergy = creep.room.find(FIND_DROPPED_RESOURCES, {
-                filter: res => res.resourceType === RESOURCE_ENERGY && res.amount > 0
-            });
+            const droppedEnergy = utils.getCachedDroppedResources(creep.room.name).filter(res =>
+                res.resourceType === RESOURCE_ENERGY && res.amount > 0
+            );
 
             if (droppedEnergy.length > 0) {
                 const closestEnergy = droppedEnergy.sort((a, b) =>
@@ -122,10 +120,10 @@ module.exports = {
             // 4. Ищем источник (как раньше)
             let source = null;
             if (!creep.memory.sourceId) {
-                source = sourcesModule.findAvailableSource(creep);
+                source = utils.findAvailableSource(creep);
                 if (source) {
                     creep.memory.sourceId = source.id;
-                } else {
+                } else { // ToDo: Убрать данный блок и избавиться от targetRooms
                     const targetRoomName = targetRooms[0];
                     if (Game.rooms[targetRoomName]) {
                         creep.moveTo(new RoomPosition(25, 25, targetRoomName));
@@ -150,10 +148,11 @@ module.exports = {
 
             // Таймер ожидания (как раньше)
             if (!creep.memory.waitStartTick) {
-                creep.memory.waitStartTick = Game.time;
+                creep.memory.waitStartTick = Memory.stats.currTime;
             }
 
-            const waitDuration = Game.time - creep.memory.waitStartTick;
+            const currentTick = Game.time; // Используем Game.time вместо Memory.stats.currTime
+            const waitDuration = currentTick - creep.memory.waitStartTick;
             if (waitDuration >= WAIT_TIMEOUT) {
                 if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
                     creep.memory.state = 'delivering';
@@ -165,19 +164,18 @@ module.exports = {
             }
         } else if (creep.memory.state === 'delivering') {
             // 1. Находим все башни в комнате
-            const towers = creep.room.find(FIND_MY_STRUCTURES, {
-                filter: (structure) =>
-                    structure.structureType === STRUCTURE_TOWER &&
-                    structure.energy < structure.energyCapacity // башня не полна
-            });
+            const towers = utils.getCachedTowers(creep.room.name).filter(structure =>
+                structure.energy < structure.energyCapacity // башня не полна
+            );
 
             if (towers.length === 0) {
                 // Все башни полны — ищем Storage/Container для разгрузки
-                const storage = creep.pos.findClosestByPath(FIND_MY_STRUCTURES, {
-                    filter: (s) =>
-                        (s.structureType === STRUCTURE_STORAGE || s.structureType === STRUCTURE_CONTAINER) &&
-                        s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-                });
+                const storageStructures = [
+                    ...utils.getCachedStorage(creep.room.name),
+                    ...utils.getCachedContainers(creep.room.name)
+                ].filter(s => s.store.getFreeCapacity(RESOURCE_ENERGY) > 0);
+                
+                const storage = creep.pos.findClosestByPath(storageStructures);
 
                 if (storage) {
                     if (creep.transfer(storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {

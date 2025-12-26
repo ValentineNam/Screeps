@@ -37,7 +37,7 @@ function countCreepsByRole(role, homeRoom, targetRoom = null) {
 // Удаляем устаревшие pending-записи
 function pruneSpawnPending() {
     if (!Memory.spawnPending) return;
-    const now = (typeof Game !== 'undefined' && Game.time) ? Game.time : Date.now();
+    const now = (typeof Game !== 'undefined' && Memory.stats.currTime) ? Memory.stats.currTime : Date.now();
     const maxAge = 200; // ticks
     for (const roomName in Memory.spawnPending) {
         const arr = Memory.spawnPending[roomName];

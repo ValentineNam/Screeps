@@ -1,4 +1,4 @@
-const sourcesModule = require('./utils');
+const utils = require('./utils');
 const constants = require('./config.constants');
 const myRooms = constants.ROOMS;
 
@@ -67,7 +67,7 @@ module.exports = {
             // 2. Если нет dropped ресурсов, ищем источник
             let source = null;
             if (!creep.memory.sourceId) {
-                source = sourcesModule.findAvailableSource(creep);
+                source = utils.findAvailableSource(creep);
                 if (source) {
                     creep.memory.sourceId = source.id;
                 } else {
@@ -99,7 +99,7 @@ module.exports = {
         // Режим: доставка энергии
         else if (creep.memory.state === 'delivering') {
             // Ищем приоритетную цель для передачи
-            const target = sourcesModule.findPriorityTarget(creep);
+            const target = utils.findPriorityTarget(creep);
 
 
             if (target) {

@@ -27,7 +27,7 @@ function ensureDeps(deps) {
         baseMemory: (role, ctx) => ({ role, homeRoom: ctx && ctx.roomName, targetRoom: ctx && ctx.roomName }),
         memoryFactories: {},
         RESOURCE_ENERGY: (typeof RESOURCE_ENERGY !== 'undefined') ? RESOURCE_ENERGY : 'energy',
-        nameGenerator: { generateName: (prefix) => `${prefix || 'Creep'}_${(typeof Game !== 'undefined' && Game.time) ? Game.time : Date.now()}` }
+        nameGenerator: { generateName: (prefix) => `${prefix || 'Creep'}_${(typeof Game !== 'undefined' && Memory.stats.currTime) ? Memory.stats.currTime : Date.now()}` }
     };
 
     const out = {};

@@ -1,7 +1,6 @@
 const baseRole = require('./role.base');
 const constants = require('./config.constants');
 const utils = require('./utils');
-const sourcesModule = utils;
 const { log } = utils;
 const myRooms = constants.ROOMS;
 
@@ -164,7 +163,7 @@ module.exports = {
             }
 
             // 6.2. Поиск приоритетной цели
-            const target = sourcesModule.findPriorityTarget(creep);
+            const target = utils.findPriorityTarget(creep);
 
             if (target) {
                 const transferResult = creep.transfer(target, RESOURCE_ENERGY);

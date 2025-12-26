@@ -46,9 +46,13 @@ module.exports.loop = () => {
     // приводим его к объекту, чтобы использовать как map roomName -> data
     if (!Memory.rooms || Array.isArray(Memory.rooms)) Memory.rooms = {};
     if (!Memory.baseStates) Memory.baseStates = {};
+    
+    // Инициализация объекта stats для кеширования Memory.stats.currTime и других метрик
+    if (!Memory.stats) Memory.stats = {};
+    Memory.stats.currTime = Game.time;
 
     // Выводим список комнат, помеченных как homeRoom, при каждом 100-м тике для отладки
-    if (Game.time % 100 === 0) {
+    if (Memory.stats.currTime % 100 === 0) {
         const claimerModule = require('./role.claimer');
         const homeRooms = claimerModule.getHomeRooms ? claimerModule.getHomeRooms() : [];
         log('INFO', `Комнаты, помеченные как homeRoom: ${homeRooms.join(', ')}`, 'System');
@@ -60,7 +64,7 @@ module.exports.loop = () => {
     const roomNames = Object.keys(Game.rooms);
     if (roomNames.length > 0) {
         // Обновляем одну комнату за тик; с N комнатами каждая будет обновляться каждые N тиков.
-        const roomToUpdate = roomNames[Game.time % roomNames.length];
+        const roomToUpdate = roomNames[Memory.stats.currTime % roomNames.length];
         roomDataService.updateRoomData(roomToUpdate, 5);
         // Запускаем менеджер химии для этой комнаты (асинхронно: по одной комнате за тик)
         try { chemistryManager.run(roomToUpdate); } catch (e) { /* ignore */ }
@@ -73,7 +77,7 @@ module.exports.loop = () => {
     }
 
     // Глобальное распределение терминалов — запускаем раз в 20 тиков
-    if (Game.time % 20 === 0) {
+    if (Memory.stats.currTime % 20 === 0) {
         try {
             chemistryManager.distributeTerminals();
             chemistryManager.scheduleProductionFromTargets(); // Schedule production based on target stocks
@@ -87,7 +91,7 @@ module.exports.loop = () => {
         // Каждые 5 тиков каждая комната будет обновлена (если комнат <= 5)
         // Если комнат больше 5, то каждая комната будет обновляться раз в Math.ceil(rooms/5) тиков
         const roomsPerTick = Math.max(1, Math.floor(roomNames.length / 5)); // максимум 5 комнат за тик
-        const startIdx = (Game.time % 5) * roomsPerTick;
+        const startIdx = (Memory.stats.currTime % 5) * roomsPerTick;
         const endIdx = Math.min(startIdx + roomsPerTick, roomNames.length);
         
         for (let i = startIdx; i < endIdx; i++) {
@@ -108,12 +112,12 @@ module.exports.loop = () => {
                 towerCount: stats.towerCount || 0,
                 isUnderAttack: (roomData.enemies || []).length >= 3,
                 needsDefense: (roomData.enemies || []).length > 0 && stats.towerCount === 0,
-                lastChecked: Game.time
+                lastChecked: Memory.stats.currTime
             };
 
             // Сохраняем состояние через ваш state-модуль
             state.setState(roomName, newState, {
-                updatedAt: Game.time,
+                updatedAt: Memory.stats.currTime,
                 roomName: roomName
             });
         }
@@ -177,5 +181,5 @@ global.getLogLevels = () => {
 //     enemies: [...],           // враги в комнате
 //     enemyStructures: [...],     // вражеские постройки
 //     stats: { ... },         // вычисленные метрики (stage, энергия и т.п.)
-//     lastUpdated: Game.time     // метка времени для инвалидации
+//     lastUpdated: Memory.stats.currTime     // метка времени для инвалидации
 // };

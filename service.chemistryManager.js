@@ -18,7 +18,7 @@ const ensureRoomMemory = (roomName) => {
     return Memory.chemistry.rooms[roomName];
 };
 
-const uid = (prefix) => (prefix || 't') + Game.time + '_' + Math.floor(Math.random()*10000);
+const uid = (prefix) => (prefix || 't') + Memory.stats.currTime + '_' + Math.floor(Math.random()*10000);
 
 module.exports = {
     enqueueProduction(roomName, compound, amount, inputs) {
@@ -30,7 +30,7 @@ module.exports = {
             amount: amount || 0,
             inputs: inputs || {}, // object resource->amount
             status: 'pending',
-            createdAt: Game.time
+            createdAt: Memory.stats.currTime
         });
         return true;
     },
@@ -72,7 +72,7 @@ module.exports = {
                                 from: 'storage',
                                 to: 'terminal',
                                 status: 'pending',
-                                createdAt: Game.time
+                                createdAt: Memory.stats.currTime
                             });
                         }
                     }
@@ -102,7 +102,7 @@ module.exports = {
             // mark produce task as staged and append transfer subtasks
             if (needTasks.length) {
                 prod.status = 'staged';
-                prod.stagedAt = Game.time;
+                prod.stagedAt = Memory.stats.currTime;
                 roomMem.tasks.push(...needTasks);
             } else {
                 // no inputs specified -> mark as failed
@@ -119,7 +119,7 @@ module.exports = {
             if (allDone) {
                 // mark produce as ready_for_lab
                 prod.status = 'ready_for_lab';
-                prod.readyAt = Game.time;
+                prod.readyAt = Memory.stats.currTime;
             }
         });
 
@@ -127,7 +127,7 @@ module.exports = {
         roomMem.tasks = roomMem.tasks.filter(t => {
             if (!t || !t.status) return false;
             if (t.status === 'done') return false;
-            if (t.status === 'failed' && (Game.time - (t.createdAt || Game.time)) > 1000) return false;
+            if (t.status === 'failed' && (Memory.stats.currTime - (t.createdAt || Memory.stats.currTime)) > 1000) return false;
             return true;
         });
 
@@ -148,7 +148,7 @@ module.exports = {
                 const res = terminal.send(task.resource, task.amount, task.toRoom);
                 if (res === OK) {
                     task.status = 'done';
-                    task.doneAt = Game.time;
+                    task.doneAt = Memory.stats.currTime;
                 } else {
                     task.lastError = res;
                     // if terminal cooldown or other transient error, leave pending
@@ -189,7 +189,7 @@ module.exports = {
             from: 'terminal',
             to: 'lab:' + labId,
             status: 'pending',
-            createdAt: Game.time,
+            createdAt: Memory.stats.currTime,
             meta: { forProduction: forProductionId }
         });
     },
@@ -310,7 +310,7 @@ module.exports = {
                     const result1 = inputLabs[0].runReaction(inputLabs[1], outputLab);
                     if (result1 === OK) {
                         task.status = 'in_progress';
-                        task.startedAt = Game.time;
+                        task.startedAt = Memory.stats.currTime;
                         
                         // Mark these labs as busy by updating their status in memory if needed
                         // In Screeps, labs automatically become busy when running reactions
@@ -335,7 +335,7 @@ module.exports = {
                     const result1 = inputLabs[0].runReaction(inputLabs[1], outputLab);
                     if (result1 === OK) {
                         task.status = 'in_progress';
-                        task.startedAt = Game.time;
+                        task.startedAt = Memory.stats.currTime;
                     } else {
                         task.status = 'ready_for_lab';
                     }
@@ -354,7 +354,7 @@ module.exports = {
             amount,
             toRoom,
             status: 'pending',
-            createdAt: Game.time
+            createdAt: Memory.stats.currTime
         });
     },
 

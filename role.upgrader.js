@@ -1,7 +1,6 @@
 const baseRole = require('./role.base');
 const constants = require('./config.constants');
 const utils = require('./utils');
-const sourcesModule = utils;
 const { log } = utils;
 const myRooms = constants.ROOMS;
 
@@ -38,12 +37,12 @@ module.exports = {
         // Проверка и смена состояния
         if (state == 'upgrading' && creep.store.getUsedCapacity() === 0) {
             creep.memory.state = 'harvesting';
-            log('DEBUG', `switch to harvesting`, creep);
+            log('INFO', `switch to harvesting`, creep);
         }
 
         if (state == 'harvesting' && creep.store.getFreeCapacity() === 0) {
             creep.memory.state = 'upgrading';
-            log('DEBUG', `switch to upgrading`, creep);
+            log('INFO', `switch to upgrading`, creep);
         }
 
         // Выполнение действий в зависимости от состояния

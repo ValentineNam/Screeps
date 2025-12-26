@@ -16,21 +16,23 @@ module.exports = {
         const targetRoom = creep.memory.targetRoom;
         const room = Game.rooms[targetRoom];
 
-        // Проверка: если рядом со спавном — срочно уходим
-        const spawns = room ? room.find(FIND_MY_SPAWNS) : [];
-        const isNearSpawn = spawns.some(spawn => 
+        // Используем кешированные данные для спавнов и контроллера
+        const spawns = utils.getCachedSpawns(targetRoom);
+        const controller = utils.getCachedController(targetRoom);
+        
+        const isNearSpawn = spawns.some(spawn =>
             creep.pos.isEqualTo(spawn.pos) || creep.pos.inRangeTo(spawn.pos, 1)
         );
 
-        if (isNearSpawn && !creep.memory.justRetreated && room && room.controller) {
+        if (isNearSpawn && !creep.memory.justRetreated && controller) {
             let validPos = null;
 
             // Пытаемся найти точку около контроллера (радиус 5–10 клеток)
             for (let i = 0; i < 10; i++) {
                 const radius = _.random(5, 10);
                 const angle = _.random() * Math.PI * 2;
-                const x = Math.round(room.controller.pos.x + radius * Math.cos(angle));
-                const y = Math.round(room.controller.pos.y + radius * Math.sin(angle));
+                const x = Math.round(controller.pos.x + radius * Math.cos(angle));
+                const y = Math.round(controller.pos.y + radius * Math.sin(angle));
 
 
                 if (x < 1 || x > 48 || y < 1 || y > 48) continue;

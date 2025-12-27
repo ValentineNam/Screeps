@@ -175,7 +175,7 @@ const DESIRED_COUNTS = [
             upgraderRatio: 0.7
         },
         creeps: {
-            scout: 0,
+            scout: 1,
             harvester: 3,
             upgrader: 4,
             builder: 1,
@@ -314,7 +314,7 @@ const DESIRED_COUNTS = [
             },
             miner: {
                 count: 2,
-                rooms: ['E18N1','E19N2','E18N2']
+                rooms: ['E18N1','E19N2','E18N2','E17N1']
             },
             // remoteHarvester: {
             //     count: 0,
@@ -398,7 +398,7 @@ const DESIRED_COUNTS = [
             upgraderRatio: 0.6
         },
         creeps: {
-            scout: 0,
+            scout: 1,
             harvester: 3,
             upgrader: 4,
             builder: 3,

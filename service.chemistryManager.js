@@ -169,8 +169,7 @@ module.exports = {
     getPendingTasks(roomName) {
         if (!Memory.chemistry || !Memory.chemistry.rooms || !Memory.chemistry.rooms[roomName]) return [];
         return (Memory.chemistry.rooms[roomName].tasks || []).filter(t => t.status === 'pending');
-    }
-    ,
+    },
     // return lab structures in the room (array of StructureLab)
     findLabs(roomName) {
         const room = Game.rooms[roomName];
@@ -262,7 +261,7 @@ module.exports = {
 
     // Process ready_for_lab tasks and initiate lab reactions
     processReadyReactions(roomName) {
-        const room = Game.rooms[roomName];
+        const room = Memory.rooms[roomName];
         if (!room) return;
 
         const roomMem = ensureRoomMemory(roomName);

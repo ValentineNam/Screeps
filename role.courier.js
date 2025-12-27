@@ -78,7 +78,7 @@ module.exports = {
             return;
         }
 
-        // on success, reduce amount and mark done if depleted
+        // on success, reduce amount and mark done if deleted
         task.amount = Math.max(0, (task.amount || 0) - (_.sum(creep.store) || 0));
         // empty creep after transfer
         // (creep.transfer already moved carried resource)

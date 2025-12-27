@@ -2,7 +2,7 @@ const baseRole = require('./role.base');
 const constants = require('./config.constants');
 const utils = require('./utils');
 const { log } = utils;
-const myRooms = constants.ROOMS;
+const STORAGE_LIMIT = 30000;
 
 module.exports = {
     run: (creep) => {
@@ -68,9 +68,9 @@ module.exports = {
                 return; // После этого не ищем источник
             }
 
-            // 2. Ищем хранилище (Storage) с ≥5000 ед. энергии
+            // 2. Ищем хранилище (Storage) с ≥30000 ед. энергии
             // Используем Memory.rooms для поиска подходящего Storage
-            const closestStorage = baseRole.findStorageWithEnergyFromMemory(creep, 30000);
+            const closestStorage = baseRole.findStorageWithEnergyFromMemory(creep, STORAGE_LIMIT);
             if (closestStorage) {
                 const withdrawResult = creep.withdraw(closestStorage, RESOURCE_ENERGY);
                 if (withdrawResult === OK) {
@@ -94,14 +94,28 @@ module.exports = {
 
             // 4. Если источников нет, ищем дропы
             log('WARN', `no sources or containers available`, creep);
-            const droppedEnergy = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
-                filter: (res) => res.resourceType === RESOURCE_ENERGY && res.amount > 0
-            });
-            if (droppedEnergy) {
-                if (creep.pickup(droppedEnergy) == ERR_NOT_IN_RANGE) {
-                    creep.moveTo(droppedEnergy, {visualizePathStyle: {stroke: '#ffaa00'}});
+            const droppedEnergy = utils.getCachedDroppedResources(creep.room.name).filter(res =>
+                res.resourceType === RESOURCE_ENERGY && res.amount > 0
+            );
+
+            if (droppedEnergy.length > 0) {
+                const closestEnergy = droppedEnergy.sort((a, b) =>
+                    creep.pos.getRangeTo(a) - creep.pos.getRangeTo(b)
+                ).find(energy => creep.pos.getRangeTo(energy) <= 2);
+
+
+                if (closestEnergy) {
+                    if (creep.pickup(closestEnergy) === OK) {
+                        creep.memory.waitStartTick = null;
+                        return;
+                    }
                 }
-                return;
+
+                const energy = creep.pos.findClosestByPath(droppedEnergy);
+                if (energy) {
+                    creep.moveTo(energy, { visualizePathStyle: { stroke: '#ffaa00' } });
+                    return;
+                }
             }
         }
     }

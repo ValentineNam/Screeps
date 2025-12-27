@@ -3,6 +3,7 @@ const constants = require('./config.constants');
 const utils = require('./utils');
 const { log } = utils;
 const myRooms = constants.ROOMS;
+const STORAGE_LIMIT = 30000;
 
 module.exports = {
     run: (creep) => {
@@ -92,7 +93,7 @@ module.exports = {
             }
 
             // Хранилище (≥30000 энергии) — используем данные из Memory
-            const closestStorage = baseRole.findStorageWithEnergyFromMemory(creep, 30000);
+            const closestStorage = baseRole.findStorageWithEnergyFromMemory(creep, STORAGE_LIMIT);
             if (closestStorage) {
                 const withdrawResult = creep.withdraw(closestStorage, RESOURCE_ENERGY);
                 if (withdrawResult === OK) {

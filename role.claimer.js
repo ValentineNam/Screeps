@@ -82,33 +82,33 @@ module.exports = {
             log('INFO', `Контроллер в ${targetRoom} уже захвачен игроком: ${controller.owner.username}`, creep);
             return;
         }
-        // if (controller.my || (controller.reservation && controller.reservation.username === creep.owner.username)) {
-        //     const signText = `База: ${targetRoom} | Владелец: ${creep.owner.username}`;
+        if (controller.my || (controller.reservation && controller.reservation.username === creep.owner.username)) {
+            const signText = `This is the WAY!`;
 
-        //     // Проверяем, есть ли уже подпись в комнате
-        //     if (creep.room.sign) {
-        //         // Если подпись есть, проверяем оставшееся время
-        //         if (creep.room.sign.text !== signText || creep.room.sign.time < Memory.stats.currTime + 100) {
-        //             const signResult = creep.room.sign.set(signText);
-        //             if (signResult === OK) {
-        //                 console.log(`Подпись обновлена в ${targetRoom}`);
-        //             } else {
-        //                 console.log(`Ошибка при обновлении подписи: ${signResult}`);
-        //             }
-        //         }
-        //     } else {
-        //         // Если подписи нет — пытаемся установить
-        //         const signResult = creep.room.sign.set(signText);
-        //         if (signResult === OK) {
-        //             console.log(`Подпись установлена в ${targetRoom}`);
-        //         } else if (signResult === ERR_NOT_IN_RANGE) {
-        //             creep.moveTo(controller, { visualizePathStyle: { stroke: '#ffff00' } });
-        //             console.log(`движется к контроллеру для установки подписи`);
-        //         } else {
-        //             console.log(`Ошибка при установке подписи: ${signResult}`);
-        //         }
-        //     }
-        // }
+            // Проверяем, есть ли уже подпись в комнате
+            if (controller.sign) {
+                // Если подпись есть, проверяем оставшееся время
+                if (controller.sign.text !== signText || controller.sign.time < Memory.stats.currTime + 100) {
+                    const signResult = creep.signController(controller, signText);
+                    if (signResult === OK) {
+                        log('INFO', `Подпись обновлена в ${targetRoom}`, creep);
+                    } else {
+                        log('WARN', `Ошибка при обновлении подписи: ${signResult}`, creep);
+                    }
+                }
+            } else {
+                // Если подписи нет — пытаемся установить
+                const signResult = creep.signController(controller, signText);
+                if (signResult === OK) {
+                    log('INFO', `Подпись установлена в ${targetRoom}`, creep);
+                } else if (signResult === ERR_NOT_IN_RANGE) {
+                    creep.moveTo(controller, { visualizePathStyle: { stroke: '#ffff00' } });
+                    log('INFO', `движется к контроллеру для установки подписи`, creep);
+                } else {
+                    log('WARN', `Ошибка при установке подписи: ${signResult}`, creep);
+                }
+            }
+        }
 
 
         // 7. Проверяем, является ли целевая комната homeRoom (комнатой захвата)

@@ -477,8 +477,8 @@ function tryLocalFillPhase(spawn, ctx, allowSmall) {
         'towerman',
         'logist',
         'claimer',
-        'guardian',   // ← новая роль
-        'healer'      // ← новая роль
+        'guardian',
+        'healer'
     ];
 
     for (const role of rolesOrder) {
